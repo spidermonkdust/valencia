@@ -93,7 +93,7 @@ Gedit.Tab? navigate(Gedit.Window window, string filename, int line, out bool is_
         Gedit.Document document = tab.get_document();
         Gtk.TextIter iter;
         document.get_iter_at_line(out iter, line - 1);
-        view.scroll_to_iter(iter, 0.25, false, 0.0, 0.0);
+        view.scroll_to_iter(iter, 0.2, false, 0.0, 0.0);
         is_new = false;
         return tab;
     }
@@ -124,6 +124,9 @@ class Instance {
     Position target_end;
     
     const Gtk.ActionEntry[] entries = {
+        { "SearchGoToDefinition", null, "Go to _Definition", "F12",
+          "Jump to a symbol's definition", on_go_to_definition },
+        
 	    { "Project", null, "_Project" },   // top-level menu
 
 	    { "ProjectBuild", Gtk.STOCK_CONVERT, "_Build", "<shift><ctrl>b",
@@ -133,6 +136,11 @@ class Instance {
     const string ui = """
         <ui>
           <menubar name="MenuBar">
+            <menu name="SearchMenu" action="Search">
+              <placeholder name="SearchOps_8">
+                <menuitem name="SearchGoToDefinitionMenu" action="SearchGoToDefinition"/>
+              </placeholder>
+            </menu>
             <placeholder name="ExtraMenu_1">
               <menu name="ProjectMenu" action="Project">
                 <menuitem name="ProjectBuildMenu" action="ProjectBuild"/>
@@ -194,8 +202,6 @@ class Instance {
             try {
                 status = source.read_line(out line, out length, out terminator_pos);
             } catch (ConvertError e) {
-                return false;   // TODO: report error
-            } catch (IOChannelError e) {
                 return false;   // TODO: report error
             }
             if (status == IOStatus.EOF) {
@@ -366,6 +372,29 @@ class Instance {
         }
         return true;
     }
+
+    void on_go_to_definition() {
+        Gedit.Document document = window.get_active_document();
+        int pos = get_insert_iter(document).get_offset();
+        
+        Gtk.TextIter start;
+        Gtk.TextIter end;
+        document.get_bounds(out start, out end);
+        weak string source = document.get_text(start, end, true);
+        Parser parser = new Parser();
+        string name = parser.word_at(source, pos);
+        
+        SourceFile sf = parser.parse(source);
+		Symbol sym = sf.resolve(name, pos);
+		if (sym == null)
+			return;
+		
+		document.get_iter_at_offset(out start, sym.start);
+		document.get_iter_at_offset(out end, sym.start + (int) sym.name.length);
+		Gedit.View view = window.get_active_view();
+        view.scroll_to_iter(start, 0.2, false, 0.0, 0.0);
+        document.select_range(start, end);
+	}
 
     public void update_ui() {
         Gedit.Document document = window.get_active_document();
