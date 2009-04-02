@@ -180,7 +180,7 @@ class Instance {
         action_group = new Gtk.ActionGroup("valencia");
         action_group.add_actions(entries, this);
         build_action = action_group.get_action("ProjectBuild");
-        build_action.set_sensitive(false);
+        update_ui();
         manager.insert_action_group(action_group, 0);
         
         ui_id = manager.add_ui_from_string(ui, -1);
