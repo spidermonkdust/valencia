@@ -121,6 +121,8 @@ class Instance {
     Gtk.TextView output_view;
     Gtk.ScrolledWindow output_pane;
     
+    Regex error_regex;
+    
     string target_filename;
     Position target_start;
     Position target_end;
@@ -184,6 +186,8 @@ class Instance {
         manager.insert_action_group(action_group, 0);
         
         ui_id = manager.add_ui_from_string(ui, -1);
+        
+        init_error_regex();
     }
     
     bool scroll_to_end() {
@@ -337,39 +341,93 @@ class Instance {
         }
     }
     
+    // We look for two kinds of error lines:
+    //   foo.vala:297.15-297.19: ...  (valac errors)
+    //   foo.c:268: ...               (GCC errors, containing a line number only)
+    void init_error_regex() {
+    	try {
+	    	error_regex = new Regex("""^(.*):(\d+)(?:\.(\d+)-(\d+)\.(\d+))?:""");
+	    } catch (RegexError e) {
+	    	return;		// TODO: report error
+	    }
+    }
+    
+    class ErrorInfo {
+    	public string filename;
+    	public string start_line;
+    	public string start_char;
+    	public string end_line;
+    	public string end_char;
+    }
+    
+    string get_line(Gtk.TextIter iter) {
+        Gtk.TextIter start;
+        Gtk.TextIter end;
+        get_line_start_end(iter, out start, out end);
+        return output_buffer.get_text(start, end, true);
+    }
+    
+    // Look for error position information in the line containing the given iterator.
+    ErrorInfo? error_info(Gtk.TextIter iter) {
+        string line = get_line(iter);
+        MatchInfo info;
+        if (error_regex.match(line, 0, out info)) {
+        	ErrorInfo e = new ErrorInfo();
+        	e.filename = info.fetch(1);
+        	e.start_line = info.fetch(2);
+        	e.start_char = info.fetch(3);
+        	e.end_line = info.fetch(4);
+        	e.end_char = info.fetch(5);
+        	return e;
+        }
+        else return null;
+    }
+    
+    // Return true if s is composed of ^^^ characters pointing to an error snippet above.
+    bool is_snippet_marker(string s) {
+    	weak string p = s;
+    	while (p != "") {
+    		unichar c = p.get_char();
+    		if (!c.isspace() && c != '^')
+    			return false;
+    		p = p.next_char();
+    	}
+    	return true;
+    }
+    
     bool on_button_press(Gtk.TextView view, Gdk.EventButton event) {
         if (event.type != Gdk.EventType.2BUTTON_PRESS)  // double click?
             return false;   // return if not
+        Gtk.TextIter iter = get_insert_iter(output_buffer);
+        ErrorInfo info = error_info(iter);
+        if (info == null) {
+        	// Is this an error snippet?
+        	Gtk.TextIter next = iter;
+        	if (!next.forward_line() || !is_snippet_marker(get_line(next)))
+        		return false;
+        	
+        	// Yes; look for error information on the previous line.
+        	Gtk.TextIter prev = iter;
+        	if (prev.backward_line())
+        		info = error_info(prev);
+        }
+        if (info == null)
+        	return false;
+        
         Gtk.TextIter start;
         Gtk.TextIter end;
-        get_line_start_end(get_insert_iter(output_buffer), out start, out end);
-        string line = output_buffer.get_text(start, end, true);
-        Regex regex;
-        try {
-            // We look for two kinds of error lines:
-            //   foo.vala:297.15-297.19: ...  (valac errors)
-            //   foo.c:268: ...               (GCC errors, containing a line number only)
-            regex = new Regex("""^(.*):(\d+)(?:\.(\d+)-(\d+)\.(\d+))?:""");
-        } catch (RegexError e) {
-            return true;    // TODO: report error
-        }
-        MatchInfo info;
-        if (!regex.match(line, 0, out info))
-            return true;    // no match
-        Gtk.TextIter begin_buffer;
-        Gtk.TextIter end_buffer;
-        output_buffer.get_bounds(out begin_buffer, out end_buffer);
-        output_buffer.remove_tag(highlight_tag, begin_buffer, end_buffer);
+        output_buffer.get_bounds(out start, out end);
+        output_buffer.remove_tag(highlight_tag, start, end);
+        get_line_start_end(iter, out start, out end);
         output_buffer.apply_tag(highlight_tag, start, end);
         
-        string filename = Path.build_filename(build_directory, info.fetch(1));
-        int line_number = info.fetch(2).to_int();
-        string match3 = info.fetch(3);
-        if (match3 == null)     // line number only
+        string filename = Path.build_filename(build_directory, info.filename);
+        int line_number = info.start_line.to_int();
+        if (info.start_char == null)     // line number only
             jump(filename, Position(line_number, 0), Position(0, 0));
         else {
-            Position start_pos = Position(line_number, match3.to_int());
-            Position end_pos = Position(info.fetch(4).to_int(), info.fetch(5).to_int() + 1);
+            Position start_pos = Position(line_number, info.start_char.to_int());
+            Position end_pos = Position(info.end_line.to_int(), info.end_char.to_int() + 1);
             jump(filename, start_pos, end_pos);
         }
         return true;
