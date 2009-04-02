@@ -301,9 +301,14 @@ class Parser {
 		if (!accept(Token.ID))
 			return null;
 		DataType t = new TypeName(scanner.val());
-		while (accept(Token.LESS_THAN))
-			if (parse_type() == null || !accept(Token.GREATER_THAN))
+		if (accept(Token.LESS_THAN)) {	// parameterized type
+			if (parse_type() == null)
 				return null;
+			while (!accept(Token.GREATER_THAN)) {
+				if (!accept(Token.COMMA) || parse_type() == null)
+					return null;
+			}
+		}
 		do {
 			if (accept(Token.QUESTION_MARK) || accept(Token.ASTERISK))
 				continue;
