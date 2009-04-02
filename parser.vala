@@ -382,7 +382,7 @@ class Parser {
 	Block? parse_block() {
 		Block b = new Block();
 		b.start = scanner.start;
-		while (!accept(Token.RIGHT_BRACE)) {
+		while (!scanner.eof() && !accept(Token.RIGHT_BRACE)) {
 			Statement s = parse_statement();
 			if (s != null)
 				b.statements.add(s);
