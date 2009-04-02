@@ -320,11 +320,36 @@ class Parser {
 		return t;
 	}
 	
+	// Skip a parameter initializer, looking for a following comma or right parenthesis.
+	void skip_initializer() {
+		int depth = 0;
+		while (!scanner.eof()) {
+			switch (peek_token()) {
+				case Token.COMMA:
+					if (depth == 0)
+						return;
+					break;
+				case Token.LEFT_PAREN:
+					++depth;
+					break;
+				case Token.RIGHT_PAREN:
+					if (depth == 0)
+						return;
+					--depth;
+					break;
+			}
+			next_token();
+		}
+	}
+	
 	Parameter? parse_parameter() {
 		DataType t = parse_type();
 		if (t == null || !accept(Token.ID))
 			return null;
-		return new Parameter(t, scanner.val(), scanner.start, scanner.end);
+		Parameter p = new Parameter(t, scanner.val(), scanner.start, scanner.end);
+		if (accept(Token.EQUALS))
+			skip_initializer();
+		return p;
 	}
 	
 	Statement? parse_statement() {
@@ -410,6 +435,7 @@ class Parser {
 	bool is_modifier(Token t) {
 		switch (t) {
 			case Token.ABSTRACT:
+			case Token.CONST:
 			case Token.OVERRIDE:
 			case Token.PRIVATE:
 			case Token.PROTECTED:
