@@ -57,6 +57,8 @@ Gtk.TextIter iter_at_position(Gtk.TextBuffer buffer, Position pos) {
     Gtk.TextIter iter;
     buffer.get_iter_at_line(out iter, pos.line - 1);
     int len = iter.get_chars_in_line() - 1;     // subtract 1 for \n
+    if (len < 0)	// no \n was present, e.g. in an empty file
+    	len = 0;
     int end = int.min(len, pos.character - 1);
     Gtk.TextIter ret;
     buffer.get_iter_at_line_offset(out ret, pos.line - 1, end);
