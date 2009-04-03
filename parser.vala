@@ -420,13 +420,20 @@ class Parser {
 					if (!accept(Token.COMMA))
 						break;
 				}
-				if (accept(Token.RIGHT_PAREN)) {
-					if (!accept(Token.SEMICOLON)) {
-						if (accept(Token.LEFT_BRACE))
-							m.body = parse_block();
-						else skip();
-					}
-				} else skip();
+				if (!accept(Token.RIGHT_PAREN)) {
+					skip();
+					return null;
+				}
+				if (!accept(Token.SEMICOLON)) {
+					// Look for a left brace.  (There may be a throws clause in between.)
+					Token t;
+					do {
+						t = next_token();
+						if (t == Token.EOF)
+							return null;
+					} while (t != Token.LEFT_BRACE);
+					m.body = parse_block();
+				}
 				m.end = scanner.end;
 				return m;
 			default:
