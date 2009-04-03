@@ -7,7 +7,7 @@ enum Token {
 	
 	// punctuation characters
 	ASTERISK, LEFT_BRACE, RIGHT_BRACE, LEFT_BRACKET, RIGHT_BRACKET, COMMA, EQUALS,
-	LEFT_PAREN, RIGHT_PAREN, QUESTION_MARK, SEMICOLON, LESS_THAN, GREATER_THAN,
+	LEFT_PAREN, RIGHT_PAREN, PERIOD, QUESTION_MARK, SEMICOLON, LESS_THAN, GREATER_THAN,
 	
 	// keywords
 	ABSTRACT, CLASS, CONST, ENUM, INTERFACE, OUT, OVERRIDE, PRIVATE, PROTECTED, PUBLIC,
@@ -139,6 +139,7 @@ class Scanner {
 				case '=': return Token.EQUALS;
 				case '(': return Token.LEFT_PAREN;
 				case ')': return Token.RIGHT_PAREN;
+				case '.': return Token.PERIOD;
 				case '?': return Token.QUESTION_MARK;
 				case ';': return Token.SEMICOLON;
 				case '<': return Token.LESS_THAN;

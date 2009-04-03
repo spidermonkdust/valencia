@@ -68,12 +68,28 @@ abstract class DataType : Node {
 	public override void print(int level) { }
 }
 
-class TypeName : DataType {
+abstract class TypeName : DataType { }
+
+class SimpleName : TypeName {
 	public string name;
 	
-	public TypeName(string name) { this.name = name; }
+	public SimpleName(string name) { this.name = name; }
 	
 	public override string to_string() { return name; }
+}
+
+class QualifiedName : TypeName {
+	public TypeName basename;
+	public string sub;
+	
+	public QualifiedName(TypeName basename, string sub) {
+		this.basename = basename;
+		this.sub = sub;
+	}
+	
+	public override string to_string() {
+		return basename.to_string() + "." + sub;
+	}
 }
 
 abstract class Variable : Symbol {
@@ -300,7 +316,12 @@ class Parser {
 	DataType? parse_type() {
 		if (!accept(Token.ID))
 			return null;
-		DataType t = new TypeName(scanner.val());
+		TypeName t = new SimpleName(scanner.val());
+		while (accept(Token.PERIOD)) {
+			if (!accept(Token.ID))
+				return null;
+			t = new QualifiedName(t, scanner.val());
+		}
 		if (accept(Token.LESS_THAN)) {	// parameterized type
 			if (parse_type() == null)
 				return null;
