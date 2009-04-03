@@ -51,9 +51,9 @@ abstract class Node : Object {
 }
 
 abstract class Symbol : Node {
-	public string name;
+	public string name;		// symbol name, or null for a constructor
 	
-	public Symbol(string name, int start, int end) {
+	public Symbol(string? name, int start, int end) {
 		base(start, end);
 		this.name = name;
 	}
@@ -219,7 +219,7 @@ class Method : Symbol, Scope {
 	public ArrayList<Parameter> parameters = new ArrayList<Parameter>();
 	public Block body;
 	
-	public Method(string name) { base(name, 0, 0); }
+	public Method(string? name) { base(name, 0, 0); }
 	
 	public override ArrayList<Node>? children() {
 		return single_node(body);
@@ -229,13 +229,25 @@ class Method : Symbol, Scope {
 		return Node.lookup_in_array(parameters, name);
 	}
 	
-	public override void print(int level) {
+	protected virtual void print_type(int level) {
 		print_name(level, "method");
+	}
+	
+	public override void print(int level) {
+		print_type(level);
 		
 		foreach (Parameter p in parameters)
 			p.print(level + 1);
 		if (body != null)
 			body.print(level + 1);
+	}
+}
+
+class Constructor : Method {
+	public Constructor() { base(null); }
+	
+	public override void print_type(int level) {
+		do_print(level, "constructor");
 	}
 }
 
@@ -439,6 +451,39 @@ class Parser {
 		b.end = scanner.end;
 		return b;
 	}
+
+	// Parse a method.  Return the method object, or null on error.
+	Method? parse_method(Method m) {
+		m.start = scanner.start;
+		if (!accept(Token.LEFT_PAREN)) {
+			skip();
+			return null;
+		}
+		while (true) {
+			Parameter p = parse_parameter();
+			if (p == null)
+				break;
+			m.parameters.add(p);
+			if (!accept(Token.COMMA))
+				break;
+		}
+		if (!accept(Token.RIGHT_PAREN)) {
+			skip();
+			return null;
+		}
+		if (!accept(Token.SEMICOLON)) {
+			// Look for a left brace.  (There may be a throws clause in between.)
+			Token t;
+			do {
+				t = next_token();
+				if (t == Token.EOF)
+					return null;
+			} while (t != Token.LEFT_BRACE);
+			m.body = parse_block();
+		}
+		m.end = scanner.end;
+		return m;
+	}
 	
 	Symbol? parse_method_or_field() {
 		DataType type = parse_type();
@@ -446,42 +491,16 @@ class Parser {
 			skip();
 			return null;
 		}
-		int start = scanner.start;
-		int end = scanner.end;
-		string name = scanner.val();
 		switch (peek_token()) {
 			case Token.SEMICOLON:
 			case Token.EQUALS:
+				Field f = new Field(type, scanner.val(), scanner.start, 0);
 				skip();
-				return new Field(type, name, start, end);
+				f.end = scanner.end;
+				return f;
 			case Token.LEFT_PAREN:
-				next_token();
-				Method m = new Method(name);
-				m.start = start;
-				while (true) {
-					Parameter p = parse_parameter();
-					if (p == null)
-						break;
-					m.parameters.add(p);
-					if (!accept(Token.COMMA))
-						break;
-				}
-				if (!accept(Token.RIGHT_PAREN)) {
-					skip();
-					return null;
-				}
-				if (!accept(Token.SEMICOLON)) {
-					// Look for a left brace.  (There may be a throws clause in between.)
-					Token t;
-					do {
-						t = next_token();
-						if (t == Token.EOF)
-							return null;
-					} while (t != Token.LEFT_BRACE);
-					m.body = parse_block();
-				}
-				m.end = scanner.end;
-				return m;
+				Method m = new Method(scanner.val());
+				return parse_method(m);
 			default:
 				skip();
 				return null;
@@ -526,10 +545,11 @@ class Parser {
 		return b == null ? null : new Construct(b, start, scanner.end);
 	}
 
-	Node parse_member() {
+	Node parse_member(string? enclosing_class) {
 		skip_attributes();
 		skip_modifiers();
-		switch (peek_token()) {
+		Token t = peek_token();
+		switch (t) {
 			case Token.CLASS:
 			case Token.INTERFACE:
 			case Token.STRUCT:
@@ -539,6 +559,10 @@ class Parser {
 			case Token.CONSTRUCT:
 				return parse_construct();
 			default:
+				if (t == Token.ID && scanner.peek_val() == enclosing_class) {
+					next_token();
+					return parse_method(new Constructor());
+				}
 				return parse_method_or_field();
 		}
 	}
@@ -549,7 +573,8 @@ class Parser {
 			skip();
 			return null;
 		}
-		Class cl = new Class(scanner.val());
+		string name = scanner.val();
+		Class cl = new Class(name);
 		cl.start = scanner.start;
 		if (!skip_to(Token.LEFT_BRACE))
 			return null;
@@ -557,7 +582,7 @@ class Parser {
 		while (!scanner.eof()) {
 			if (accept(Token.RIGHT_BRACE))
 				break;
-			Node n = parse_member();
+			Node n = parse_member(name);
 			if (n != null)
 				cl.members.add(n);
 		}
@@ -596,7 +621,7 @@ class Parser {
 				sf.using_namespaces.add(s);
 		}
 		while (!scanner.eof()) {
-			Symbol s = parse_member() as Symbol;
+			Symbol s = parse_member(null) as Symbol;
 			if (s != null)
 				sf.symbols.add(s);
 		}

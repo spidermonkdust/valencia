@@ -41,16 +41,20 @@ const Keyword[] keywords = {
 };
 
 class Scanner {
+	// The lookahead token.  If not NONE, it extends from characters (token_start_char) to (input),
+	// and from positions (token_start) to (input_pos).
+	Token token = Token.NONE;
+	
+	weak string token_start_char;
 	weak string input;
+	
+	int token_start;
 	int input_pos;
 	
-	// The lookahead token.  If not NONE, it extends from characters (token_start) to (input),
-	// and from positions (token_start_pos) to (input_pos).
-	Token token = Token.NONE;
-	weak string token_start;
-	int token_start_pos;
-	
-	// The following variables apply to the last token retrieved with next_token().
+	// The last token retrieved with next_token() extends from characters (start_char) to
+	// (end_char), and from positions (start) to (end).
+	weak string start_char;
+	weak string end_char;
 	public int start;	// starting character position
 	public int end;	    // ending character position
 	
@@ -79,7 +83,7 @@ class Scanner {
 
 	// Return true if the current token equals s.	
 	bool match(string s) {
-		char *p = token_start;
+		char *p = token_start_char;
 		char *q = s;
 		while (*p != 0 && *q != 0 && *p == *q) {
 			p = p + 1;
@@ -90,8 +94,8 @@ class Scanner {
 	
 	Token read_token() {
 		while (input != "") {
-			token_start = input;
-			token_start_pos = input_pos;
+			token_start_char = input;
+			token_start = input_pos;
 			unichar c = next_char();
 			if (c.isspace())
 				continue;
@@ -160,17 +164,25 @@ class Scanner {
 	public Token next_token() {
 		Token t = peek_token();
 		token = Token.NONE;
-		start = token_start_pos;
+		start_char = token_start_char;
+		end_char = input;
+		start = token_start;
 		end = input_pos;
 		return t;
 	}
 	
 	public bool eof() { return peek_token() == Token.EOF; }
+
+	// Return the source text of peek_token().
+	public string peek_val() {
+		size_t bytes = (char *) input - (char *) token_start_char;
+		return token_start_char.ndup(bytes);
+	}
 	
-	// Return the value of the last token peeked or retrieved, if it was an identifier.
+	// Return the source text of the last token retrieved.
 	public string val() {
-		size_t bytes = (char *) input - (char *) token_start;
-		return token_start.ndup(bytes);
+		size_t bytes = (char *) end_char - (char *) start_char;
+		return start_char.ndup(bytes);
 	} 
 }
 
