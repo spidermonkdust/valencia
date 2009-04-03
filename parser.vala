@@ -343,10 +343,13 @@ class Parser {
 	}
 	
 	Parameter? parse_parameter() {
-		DataType t = parse_type();
-		if (t == null || !accept(Token.ID))
+		Token t = peek_token();
+		if (t == Token.OUT || t == Token.REF)
+			next_token();
+		DataType type = parse_type();
+		if (type == null || !accept(Token.ID))
 			return null;
-		Parameter p = new Parameter(t, scanner.val(), scanner.start, scanner.end);
+		Parameter p = new Parameter(type, scanner.val(), scanner.start, scanner.end);
 		if (accept(Token.EQUALS))
 			skip_initializer();
 		return p;
