@@ -459,12 +459,19 @@ class Parser {
 		}
 	}
 
+	void skip_attributes() {
+		while (accept(Token.LEFT_BRACKET))
+			while (next_token() != Token.RIGHT_BRACKET)
+				;
+	}
+
 	void skip_modifiers() {
 		while (is_modifier(peek_token()))
 			next_token();
 	}
 
 	Symbol parse_member() {
+		skip_attributes();
 		skip_modifiers();
 		switch (peek_token()) {
 			case Token.CLASS:
