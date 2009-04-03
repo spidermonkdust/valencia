@@ -12,6 +12,14 @@ abstract class Node : Object {
 	// Return all children which may possibly contain a scope.
 	public virtual ArrayList<Node>? children() { return null; }
 	
+	protected static ArrayList<Node>? single_node(Node n) {
+		if (n == null)
+			return null;
+		ArrayList<Node> a = new ArrayList<Node>();
+		a.add(n);
+		return a;
+	}
+	
 	protected Chain? find(Chain? parent, int pos) {
 		Chain c = parent;
 		Scope s = this as Scope;
@@ -24,6 +32,15 @@ abstract class Node : Object {
 				if (n.start <= pos && pos <= n.end)
 					return n.find(c, pos);
 		return c;
+	}
+	
+	public static Symbol? lookup_in_array(ArrayList<Node> a, string name) {
+		foreach (Node n in a) {
+			Symbol s = n as Symbol;
+			if (s != null && s.name == name)
+				return s;
+		}
+		return null;
 	}
 	
 	public abstract void print(int level);
@@ -39,13 +56,6 @@ abstract class Symbol : Node {
 	public Symbol(string name, int start, int end) {
 		base(start, end);
 		this.name = name;
-	}
-	
-	public static Symbol? lookup_in_array(ArrayList<Symbol> a, string name) {
-		foreach (Symbol s in a)
-			if (s.name == name)
-				return s;
-		return null;
 	}
 	
 	protected void print_name(int level, string s) {
@@ -185,6 +195,26 @@ class Parameter : Variable {
 	protected override string kind() { return "parameter"; }
 }
 
+// a construct block
+class Construct : Node {
+	public Block body;
+	
+	public Construct(Block body, int start, int end) {
+		base(start, end);
+		this.body = body;
+	}
+	
+	public override ArrayList<Node>? children() {
+		return single_node(body);
+	}
+
+	public override void print(int level) {
+		do_print(level, "construct");
+		if (body != null)
+			body.print(level + 1);
+	}
+}
+
 class Method : Symbol, Scope {
 	public ArrayList<Parameter> parameters = new ArrayList<Parameter>();
 	public Block body;
@@ -192,16 +222,11 @@ class Method : Symbol, Scope {
 	public Method(string name) { base(name, 0, 0); }
 	
 	public override ArrayList<Node>? children() {
-		if (body == null)
-			return null;
-			
-		ArrayList<Node> a = new ArrayList<Node>();
-		a.add(body);
-		return a;
+		return single_node(body);
 	}
 	
 	Symbol? lookup(string name, int pos) {
-		return Symbol.lookup_in_array(parameters, name);
+		return Node.lookup_in_array(parameters, name);
 	}
 	
 	public override void print(int level) {
@@ -224,21 +249,21 @@ class Field : Variable {
 
 // a class, struct or interface
 class Class : TypeSymbol, Scope {
-	public ArrayList<Symbol> members = new ArrayList<Symbol>();
+	public ArrayList<Node> members = new ArrayList<Node>();
 	
 	public Class(string name) { base(name, 0, 0); }
 	
 	public override ArrayList<Node>? children() { return members; }
 	
 	Symbol? lookup(string name, int pos) {
-		return Symbol.lookup_in_array(members, name);
+		return Node.lookup_in_array(members, name);
 	}
 	
 	public override void print(int level) {
 		print_name(level, "class");
 		
-		foreach (Symbol m in members)
-			m.print(level + 1);
+		foreach (Node n in members)
+			n.print(level + 1);
 	}
 }
 
@@ -255,7 +280,7 @@ class SourceFile : Node, Scope {
 	public override ArrayList<Node>? children() { return symbols; }
 
 	Symbol? lookup(string name, int pos) {
-		return Symbol.lookup_in_array(symbols, name);
+		return Node.lookup_in_array(symbols, name);
 	}
 
 	public Symbol? resolve(string name, int pos) {
@@ -491,7 +516,17 @@ class Parser {
 			next_token();
 	}
 
-	Symbol parse_member() {
+	Construct? parse_construct() {
+		if (!accept(Token.CONSTRUCT))
+			return null;
+		int start = scanner.start;
+		if (!accept(Token.LEFT_BRACE))
+			return null;
+		Block b = parse_block();
+		return b == null ? null : new Construct(b, start, scanner.end);
+	}
+
+	Node parse_member() {
 		skip_attributes();
 		skip_modifiers();
 		switch (peek_token()) {
@@ -501,6 +536,8 @@ class Parser {
 				return parse_class();
 			case Token.ENUM:
 				return parse_enum();
+			case Token.CONSTRUCT:
+				return parse_construct();
 			default:
 				return parse_method_or_field();
 		}
@@ -520,9 +557,9 @@ class Parser {
 		while (!scanner.eof()) {
 			if (accept(Token.RIGHT_BRACE))
 				break;
-			Symbol m = parse_member();
-			if (m != null)
-				cl.members.add(m);
+			Node n = parse_member();
+			if (n != null)
+				cl.members.add(n);
 		}
 		cl.end = scanner.end;
 		return cl;
@@ -559,7 +596,7 @@ class Parser {
 				sf.using_namespaces.add(s);
 		}
 		while (!scanner.eof()) {
-			Symbol s = parse_member();
+			Symbol s = parse_member() as Symbol;
 			if (s != null)
 				sf.symbols.add(s);
 		}
