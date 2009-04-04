@@ -442,7 +442,7 @@ class Instance {
         document.get_bounds(out start, out end);
         weak string source = document.get_text(start, end, true);
         Parser parser = new Parser();
-        string name = parser.word_at(source, pos);
+        CompoundName name = parser.name_at(source, pos);
         
         SourceFile sf = parser.parse(source);
 		Symbol sym = sf.resolve(name, pos);

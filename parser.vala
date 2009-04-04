@@ -44,10 +44,10 @@ class Parser {
 			}
 	}
 	
-	DataType? parse_type() {
+	CompoundName? parse_type() {
 		if (!accept(Token.ID))
 			return null;
-		TypeName t = new SimpleName(scanner.val());
+		CompoundName t = new SimpleName(scanner.val());
 		while (accept(Token.PERIOD)) {
 			if (!accept(Token.ID))
 				return null;
@@ -98,7 +98,7 @@ class Parser {
 		Token t = peek_token();
 		if (t == Token.OUT || t == Token.REF)
 			next_token();
-		DataType type = parse_type();
+		CompoundName type = parse_type();
 		if (type == null || !accept(Token.ID))
 			return null;
 		Parameter p = new Parameter(type, scanner.val(), scanner.start, scanner.end);
@@ -108,7 +108,7 @@ class Parser {
 	}
 	
 	Statement? parse_statement() {
-		DataType type = parse_type();
+		CompoundName type = parse_type();
 		if (type != null && accept(Token.ID)) {
 			string name = scanner.val();
 			int start = scanner.start;
@@ -180,7 +180,7 @@ class Parser {
 	}
 	
 	Symbol? parse_method_or_field() {
-		DataType type = parse_type();
+		CompoundName type = parse_type();
 		if (type == null || !accept(Token.ID)) {
 			skip();
 			return null;
@@ -322,12 +322,24 @@ class Parser {
 		return sf;
 	}
 	
-	public string word_at(string input, int pos) {
+	public CompoundName? name_at(string input, int pos) {
 		scanner = new Scanner(input);
-		Token t = Token.NONE;
-		while (scanner.end < pos && !scanner.eof())
-			t = scanner.next_token();
-		return t == Token.ID ? scanner.val() : null;
+		while (scanner.end < pos) {
+			Token t = scanner.next_token();
+			if (t == Token.EOF)
+				break;
+			if (t == Token.ID) {
+				CompoundName name = new SimpleName(scanner.val());
+				while (true) {
+					if (scanner.end >= pos)
+						return name;
+					if (!accept(Token.PERIOD) || !accept(Token.ID))
+						break;
+					name = new QualifiedName(name, scanner.val());
+				}
+			}
+		}
+		return null;
 	}
 }
 

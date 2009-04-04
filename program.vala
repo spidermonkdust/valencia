@@ -1,5 +1,31 @@
 using Gee;
 
+abstract class CompoundName {
+	public abstract string to_string();
+}
+
+class SimpleName : CompoundName {
+	public string name;
+	
+	public SimpleName(string name) { this.name = name; }
+	
+	public override string to_string() { return name; }
+}
+
+class QualifiedName : CompoundName {
+	public CompoundName basename;
+	public string name;
+	
+	public QualifiedName(CompoundName basename, string name) {
+		this.basename = basename;
+		this.name = name;
+	}
+	
+	public override string to_string() {
+		return basename.to_string() + "." + name;
+	}
+}
+
 abstract class Node : Object {
 	public int start;
 	public int end;
@@ -20,7 +46,7 @@ abstract class Node : Object {
 		return a;
 	}
 	
-	protected Chain? find(Chain? parent, int pos) {
+	Chain? find1(Chain? parent, int pos) {
 		Chain c = parent;
 		Scope s = this as Scope;
 		if (s != null)
@@ -30,9 +56,11 @@ abstract class Node : Object {
 		if (nodes != null)
 			foreach (Node n in nodes)
 				if (n.start <= pos && pos <= n.end)
-					return n.find(c, pos);
+					return n.find1(c, pos);
 		return c;
 	}
+	
+	protected Chain? find(int pos) { return find1(null, pos); }
 	
 	public static Symbol? lookup_in_array(ArrayList<Node> a, string name) {
 		foreach (Node n in a) {
@@ -63,6 +91,10 @@ abstract class Symbol : Node {
 	}
 }
 
+interface Scope : Object {
+	public abstract Symbol? lookup(string name, int pos);
+}
+
 abstract class TypeSymbol : Symbol {
 	public TypeSymbol(string name, int start, int end) { base(name, start, end); }
 }
@@ -73,39 +105,10 @@ abstract class Statement : Node {
 	public virtual Symbol? defines_symbol(string name) { return null; }
 }
 
-abstract class DataType : Node {
-	public abstract string to_string();
-	public override void print(int level) { }
-}
-
-abstract class TypeName : DataType { }
-
-class SimpleName : TypeName {
-	public string name;
-	
-	public SimpleName(string name) { this.name = name; }
-	
-	public override string to_string() { return name; }
-}
-
-class QualifiedName : TypeName {
-	public TypeName basename;
-	public string sub;
-	
-	public QualifiedName(TypeName basename, string sub) {
-		this.basename = basename;
-		this.sub = sub;
-	}
-	
-	public override string to_string() {
-		return basename.to_string() + "." + sub;
-	}
-}
-
 abstract class Variable : Symbol {
-	DataType type;
+	public CompoundName type;
 	
-	public Variable(DataType type, string name, int start, int end) {
+	public Variable(CompoundName type, string name, int start, int end) {
 		base(name, start, end);
 		this.type = type;
 	}
@@ -118,7 +121,7 @@ abstract class Variable : Symbol {
 }
 
 class LocalVariable : Variable {
-	public LocalVariable(DataType type, string name, int start, int end) {
+	public LocalVariable(CompoundName type, string name, int start, int end) {
 		base(type, name, start, end);
 	}
 	
@@ -142,10 +145,6 @@ class DeclarationStatement : Statement {
 	}
 }
 
-interface Scope : Object {
-	public abstract Symbol? lookup(string name, int pos);
-}
-
 class Chain {
 	Scope scope;
 	Chain parent;
@@ -160,6 +159,13 @@ class Chain {
 		if (s != null)
 			return s;
 		return parent == null ? null : parent.lookup(name, pos);
+	}
+	
+	public TypeSymbol? lookup_type(string name) {
+		TypeSymbol s = scope.lookup(name, 0) as TypeSymbol;
+		if (s != null)
+			return s;
+		return parent == null ? null : parent.lookup_type(name);
 	}
 }
 
@@ -188,7 +194,7 @@ class Block : Statement, Scope {
 }
 
 class Parameter : Variable {
-	public Parameter(DataType type, string name, int start, int end) {
+	public Parameter(CompoundName type, string name, int start, int end) {
 		base(type, name, start, end);
 	}
 	
@@ -252,7 +258,7 @@ class Constructor : Method {
 }
 
 class Field : Variable {
-	public Field(DataType type, string name, int start, int end) {
+	public Field(CompoundName type, string name, int start, int end) {
 		base(type, name, start, end);
 	}
 	
@@ -295,11 +301,29 @@ class SourceFile : Node, Scope {
 		return Node.lookup_in_array(symbols, name);
 	}
 
-	public Symbol? resolve(string name, int pos) {
-		Chain c = find(null, pos);
-		return c.lookup(name, pos);
+	TypeSymbol? resolve_type(CompoundName name, Chain chain) {
+		SimpleName s = name as SimpleName;
+		if (s == null)
+			return null;	// TODO: handle namespaces
+		return chain.lookup_type(s.name);
 	}
-	
+
+	public Symbol? resolve(CompoundName name, int pos) {
+		SimpleName s = name as SimpleName;
+		if (s != null) {
+			Chain c = find(pos);
+			return c.lookup(s.name, pos);
+		}
+		
+		QualifiedName q = (QualifiedName) name;
+		Symbol left = resolve(q.basename, pos);
+		Variable v = left as Variable;
+		if (v != null)
+			left = resolve_type(v.type, find(v.start));
+		Scope scope = left as Scope;
+		return scope == null ? null : scope.lookup(q.name, 0);
+	}
+
 	public override void print(int level) {
 		foreach (Symbol s in symbols)
 			s.print(level);
