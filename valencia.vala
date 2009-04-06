@@ -298,7 +298,7 @@ class Instance {
     
     void on_build() {
         foreach (Gedit.Document d in Gedit.App.get_default().get_documents())
-            if (!d.is_untitled() && !d.is_untouched()) {
+            if (!d.is_untitled() && d.get_modified()) {
                 ++saving;
                 Signal.connect(d, "saved", (Callback) saved_callback, this);
                 d.save(0);
