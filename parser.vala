@@ -72,9 +72,9 @@ class Parser {
 		return t;
 	}
 	
-	// Skip an initializer, looking for a following comma, right parenthesis,
+	// Skip an expression, looking for a following comma, right parenthesis,
 	// semicolon or right brace.
-	void skip_initializer() {
+	void skip_expression() {
 		int depth = 0;
 		while (!scanner.eof()) {
 			switch (peek_token()) {
@@ -106,11 +106,33 @@ class Parser {
 			return null;
 		Parameter p = new Parameter(type, scanner.val(), scanner.start, scanner.end);
 		if (accept(Token.EQUALS))
-			skip_initializer();
+			skip_expression();
 		return p;
 	}
 	
+	ForEach? parse_foreach() {
+		int start = scanner.start;
+		if (!accept(Token.LEFT_PAREN))
+			return null;
+		CompoundName type = parse_type();
+		if (type == null || !accept(Token.ID)) {
+			skip();
+			return null;
+		}
+		LocalVariable v = new LocalVariable(type, scanner.val(), scanner.start, scanner.end);
+		skip_expression();
+		if (!accept(Token.RIGHT_PAREN)) {
+			skip();
+			return null;
+		}
+		Statement s = parse_statement();
+		return new ForEach(v, s, start, scanner.end);
+	}
+	
 	Statement? parse_statement() {
+		if (accept(Token.FOREACH))
+			return parse_foreach();
+			
 		CompoundName type = parse_type();
 		if (type != null && accept(Token.ID)) {
 			string name = scanner.val();
@@ -282,7 +304,7 @@ class Parser {
 			while (!scanner.eof() && accept(Token.ID)) {
 				Field f = new Field(new SimpleName(name), scanner.val(), scanner.start, 0);
 				if (accept(Token.EQUALS))
-					skip_initializer();
+					skip_expression();
 				f.end = scanner.end;
 				cl.members.add(f);
 				if (!accept(Token.COMMA))

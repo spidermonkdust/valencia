@@ -38,7 +38,7 @@ abstract class Node : Object {
 	// Return all children which may possibly contain a scope.
 	public virtual ArrayList<Node>? children() { return null; }
 	
-	protected static ArrayList<Node>? single_node(Node n) {
+	protected static ArrayList<Node>? single_node(Node? n) {
 		if (n == null)
 			return null;
 		ArrayList<Node> a = new ArrayList<Node>();
@@ -142,6 +142,31 @@ class DeclarationStatement : Statement {
 	
 	public override void print(int level) {
 		variable.print(level);
+	}
+}
+
+class ForEach : Statement, Scope {
+	public LocalVariable variable;
+	public Statement statement;
+	
+	public ForEach(LocalVariable variable, Statement? statement, int start, int end) {
+		base(start, end);
+		this.variable = variable;
+		this.statement = statement;
+	}
+	
+	public override ArrayList<Node>? children() { return single_node(statement); }
+	
+	Symbol? lookup(string name, int pos) {
+		return variable.name == name ? variable : null;
+	}	
+	
+	protected override void print(int level) {
+		do_print(level, "foreach");
+		
+		variable.print(level + 1);
+		if (statement != null)
+			statement.print(level + 1);
 	}
 }
 
