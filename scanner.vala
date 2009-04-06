@@ -173,12 +173,6 @@ class Scanner {
 	
 	public bool eof() { return peek_token() == Token.EOF; }
 
-	// Return the source text of peek_token().
-	public string peek_val() {
-		size_t bytes = (char *) input - (char *) token_start_char;
-		return token_start_char.ndup(bytes);
-	}
-	
 	// Return the source text of the last token retrieved.
 	public string val() {
 		size_t bytes = (char *) end_char - (char *) start_char;

@@ -72,12 +72,15 @@ class Parser {
 		return t;
 	}
 	
-	// Skip a parameter initializer, looking for a following comma or right parenthesis.
+	// Skip an initializer, looking for a following comma, right parenthesis,
+	// semicolon or right brace.
 	void skip_initializer() {
 		int depth = 0;
 		while (!scanner.eof()) {
 			switch (peek_token()) {
 				case Token.COMMA:
+				case Token.RIGHT_BRACE:
+				case Token.SEMICOLON:
 					if (depth == 0)
 						return;
 					break;
@@ -179,9 +182,15 @@ class Parser {
 		return m;
 	}
 	
-	Symbol? parse_method_or_field() {
+	Symbol? parse_method_or_field(string? enclosing_class) {
 		CompoundName type = parse_type();
-		if (type == null || !accept(Token.ID)) {
+		if (type == null) {
+			skip();
+			return null;
+		}
+		if (peek_token() == Token.LEFT_PAREN && type.to_string() == enclosing_class)
+			return parse_method(new Constructor());
+		if (!accept(Token.ID)) {
 			skip();
 			return null;
 		}
@@ -247,22 +256,18 @@ class Parser {
 			case Token.CLASS:
 			case Token.INTERFACE:
 			case Token.STRUCT:
-				return parse_class();
+				return parse_class(false);
 			case Token.ENUM:
-				return parse_enum();
+				return parse_class(true);
 			case Token.CONSTRUCT:
 				return parse_construct();
 			default:
-				if (t == Token.ID && scanner.peek_val() == enclosing_class) {
-					next_token();
-					return parse_method(new Constructor());
-				}
-				return parse_method_or_field();
+				return parse_method_or_field(enclosing_class);
 		}
 	}
 
-	Class? parse_class() {
-		next_token();	// move past 'class'
+	Class? parse_class(bool is_enum) {
+		next_token();	// move past 'class' or 'enum'
 		if (!accept(Token.ID)) {
 			skip();
 			return null;
@@ -273,27 +278,27 @@ class Parser {
 		if (!skip_to(Token.LEFT_BRACE))
 			return null;
 			
-		while (!scanner.eof()) {
-			if (accept(Token.RIGHT_BRACE))
-				break;
+		if (is_enum) {
+			while (!scanner.eof() && accept(Token.ID)) {
+				Field f = new Field(new SimpleName(name), scanner.val(), scanner.start, 0);
+				if (accept(Token.EQUALS))
+					skip_initializer();
+				f.end = scanner.end;
+				cl.members.add(f);
+				if (!accept(Token.COMMA))
+					break;
+			}
+			accept(Token.SEMICOLON);
+		}
+		
+		while (!scanner.eof() && !accept(Token.RIGHT_BRACE)) {
 			Node n = parse_member(name);
 			if (n != null)
 				cl.members.add(n);
 		}
+		
 		cl.end = scanner.end;
 		return cl;
-	}
-
-	Enum? parse_enum() {
-		next_token();	// move past 'enum'
-		if (!accept(Token.ID)) {
-			skip();
-			return null;
-		}
-		int start = scanner.start;
-		string name = scanner.val();
-		skip();
-		return new Enum(name, start, scanner.end);
 	}
 
 	string? parse_using() {

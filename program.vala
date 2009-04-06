@@ -265,7 +265,7 @@ class Field : Variable {
 	protected override string kind() { return "field"; }
 }
 
-// a class, struct or interface
+// a class, struct, interface or enum
 class Class : TypeSymbol, Scope {
 	public ArrayList<Node> members = new ArrayList<Node>();
 	
@@ -283,12 +283,6 @@ class Class : TypeSymbol, Scope {
 		foreach (Node n in members)
 			n.print(level + 1);
 	}
-}
-
-class Enum : TypeSymbol {
-	public Enum(string name, int start, int end) { base(name, start, end); }
-	
-	public override void print(int level) { print_name(level, "enum"); }	
 }
 
 class SourceFile : Node, Scope {
