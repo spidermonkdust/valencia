@@ -254,9 +254,7 @@ class Method : Symbol, Scope {
 	
 	public Method(string? name, SourceFile source) { base(name, source, 0, 0); }
 	
-	public override ArrayList<Node>? children() {
-		return single_node(body);
-	}
+	public override ArrayList<Node>? children() { return single_node(body);	}
 	
 	Symbol? lookup(string name, int pos) {
 		return Node.lookup_in_array(parameters, name);
@@ -312,40 +310,99 @@ class Class : TypeSymbol, Scope {
 	}
 }
 
-class SourceFile : Node {
-	weak Program program;
+class Namespace : Symbol, Scope {
+	public string full_name;
+	
+	public Namespace(string? name, string? full_name, SourceFile source) {
+		base(name, source, 0, 0);
+		this.full_name = full_name;
+	}
+	
+	public ArrayList<Symbol> symbols = new ArrayList<Symbol>();
+	
+	public override ArrayList<Node>? children() { return symbols; }
+
+	public Symbol? lookup(string name, int pos) {
+		return source.program.lookup_in_namespace(full_name, name); 
+	}
+	
+	public Symbol? lookup1(string name) {
+		return Node.lookup_in_array(symbols, name);
+	}
+
+	public override void print(int level) {
+		print_name(level, "namespace");
+		foreach (Symbol s in symbols)
+			s.print(level + 1);
+	}
+}
+
+class SourceFile : Node, Scope {
+	public weak Program program;
 	public string filename;
 	
 	public ArrayList<string> using_namespaces = new ArrayList<string>();
-	public ArrayList<Symbol> symbols = new ArrayList<Symbol>();
+	public ArrayList<Namespace> namespaces = new ArrayList<Namespace>();
+	public Namespace top;
 	
 	public SourceFile(Program? program, string filename) {
 		this.program = program;
 		this.filename = filename;
+		alloc_top();
 	}
 	
-	public override ArrayList<Node>? children() { return symbols; }
-
+	void alloc_top() {
+		top = new Namespace(null, null, this);
+		namespaces.add(top);
+	}
+	
 	public void clear() {
 		using_namespaces.clear();
-		symbols.clear();
+		namespaces.clear();
+		alloc_top();
 	}
 
-	public Symbol? lookup(string name) {
-		return Node.lookup_in_array(symbols, name);
+	public override ArrayList<Node>? children() { return single_node(top);	}
+	
+	Symbol? lookup(string name, int pos) {
+		foreach (string ns in using_namespaces) {
+			Symbol s = program.lookup_in_namespace(ns, name);
+			if (s != null)
+				return s;
+		}
+		return null;
 	}
 
+	static Chain? symbol_chain(Symbol symbol) {
+		return symbol.source.find(null, symbol.start);
+	}
+	
+	public Symbol? resolve1(CompoundName name, Chain chain, int pos, bool find_type) {
+		SimpleName s = name as SimpleName;
+		if (s != null)
+			return find_type ? chain.lookup_type(s.name) : chain.lookup(s.name, pos);
+		
+		QualifiedName q = (QualifiedName) name;
+		Symbol left = resolve1(q.basename, chain, pos, find_type);
+		if (!find_type) {
+			Variable v = left as Variable;
+			if (v != null)
+				left = resolve1(v.type, symbol_chain(v), 0, true);
+		}
+		Scope scope = left as Scope;
+		return scope == null ? null : scope.lookup(q.name, 0);
+	}
+	
 	public Symbol? resolve(CompoundName name, int pos) {
-		return program.resolve(name, this, pos);
-	}
-
+		return resolve1(name, find(null, pos), pos, false);
+	}	
+	
 	public override void print(int level) {
-		foreach (Symbol s in symbols)
-			s.print(level);
-	}
+		top.print(level);
+	}	
 }
 
-class Program : Object, Scope {
+class Program : Object {
 	string directory;
 	ArrayList<SourceFile> sources = new ArrayList<SourceFile>();
 	
@@ -372,47 +429,19 @@ class Program : Object, Scope {
 		programs.add(this);
 	}
 	
-	static bool is_vala(string filename) { return filename.has_suffix(".vala"); }
+	static bool is_vala(string filename) {
+		return filename.has_suffix(".vala") || filename.has_suffix(".vapi");
+	}
 	
-	Symbol? lookup(string name, int pos) {
-		foreach (SourceFile source in sources) {
-			Symbol s = source.lookup(name);
-			if (s != null)
-				return s;
-		}
+	public Symbol? lookup_in_namespace(string? namespace_name, string name) {
+		foreach (SourceFile source in sources)
+			foreach (Namespace n in source.namespaces)
+				if (n.full_name == namespace_name) {
+					Symbol s = n.lookup1(name);
+					if (s != null)
+						return s;
+				}
 		return null;
-	}
-
-	Chain position_chain(SourceFile source, int pos) {
-		Chain top = new Chain(this, null);
-		return source.find(top, pos);
-	}
-
-	Chain? symbol_chain(Symbol symbol) {
-		return position_chain(symbol.source, symbol.start);
-	}
-	
-	TypeSymbol? resolve_type(CompoundName name, Chain chain) {
-		SimpleName s = name as SimpleName;
-		if (s == null)
-			return null;	// TODO: handle namespaces
-		return chain.lookup_type(s.name);
-	}
-
-	public Symbol? resolve(CompoundName name, SourceFile source, int pos) {
-		SimpleName s = name as SimpleName;
-		if (s != null) {
-			Chain c = position_chain(source, pos);
-			return c.lookup(s.name, pos);
-		}
-		
-		QualifiedName q = (QualifiedName) name;
-		Symbol left = resolve(q.basename, source, pos);
-		Variable v = left as Variable;
-		if (v != null)
-			left = resolve_type(v.type, symbol_chain(v));
-		Scope scope = left as Scope;
-		return scope == null ? null : scope.lookup(q.name, 0);
 	}
 
 	public SourceFile? find_source(string path) {

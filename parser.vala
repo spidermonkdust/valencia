@@ -3,6 +3,7 @@ using Gee;
 class Parser {
 	SourceFile source;
 	Scanner scanner;
+	Namespace current_namespace;
 	
 	Token peek_token() { return scanner.peek_token(); }
 	Token next_token() { return scanner.next_token(); }
@@ -271,11 +272,16 @@ class Parser {
 		return b == null ? null : new Construct(b, start, scanner.end);
 	}
 
-	Node parse_member(string? enclosing_class) {
+	Node? parse_member(string? enclosing_class) {
 		skip_attributes();
 		skip_modifiers();
 		Token t = peek_token();
 		switch (t) {
+			case Token.NAMESPACE:
+				if (enclosing_class == null)
+					return parse_namespace();
+				skip();
+				return null;
 			case Token.CLASS:
 			case Token.INTERFACE:
 			case Token.STRUCT:
@@ -324,6 +330,39 @@ class Parser {
 		return cl;
 	}
 
+	static string join(string? a, string b) {
+		return a == null ? b : a + "." + b;
+	}
+
+	Namespace? parse_namespace() {
+		next_token();	// move past 'namespace'
+		if (!accept(Token.ID)) {
+			skip();
+			return null;
+		}
+		string name = scanner.val();
+		Namespace n = new Namespace(name, join(current_namespace.full_name, name), source);
+		n.start = scanner.start;
+		if (!accept(Token.LEFT_BRACE)) {
+			skip();
+			return null;
+		}
+			
+		Namespace parent = current_namespace;
+		current_namespace = n;
+		
+		while (!scanner.eof() && !accept(Token.RIGHT_BRACE)) {
+			Symbol s = parse_member(null) as Symbol;
+			if (s != null)
+				n.symbols.add(s);
+		}
+		
+		n.end = scanner.end;
+		source.namespaces.add(n);
+		current_namespace = parent;
+		return n;
+	}
+
 	string? parse_using() {
 		if (!accept(Token.ID)) {
 			skip();
@@ -342,11 +381,13 @@ class Parser {
 			if (s != null)
 				source.using_namespaces.add(s);
 		}
+		current_namespace = source.top;
 		while (!scanner.eof()) {
 			Symbol s = parse_member(null) as Symbol;
 			if (s != null)
-				source.symbols.add(s);
+				source.top.symbols.add(s);
 		}
+		source.top.end = scanner.end;
 	}
 	
 	public CompoundName? name_at(string input, int pos) {

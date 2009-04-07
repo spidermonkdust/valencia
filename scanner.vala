@@ -10,7 +10,7 @@ enum Token {
 	LEFT_PAREN, RIGHT_PAREN, PERIOD, QUESTION_MARK, SEMICOLON, LESS_THAN, GREATER_THAN,
 	
 	// keywords
-	ABSTRACT, CLASS, CONST, CONSTRUCT, ENUM, FOREACH, INTERFACE, OUT, OVERRIDE,
+	ABSTRACT, CLASS, CONST, CONSTRUCT, ENUM, FOREACH, INTERFACE, NAMESPACE, OUT, OVERRIDE,
 	PRIVATE, PROTECTED, PUBLIC,	REF, RETURN, STATIC, STRUCT, USING, VIRTUAL, WEAK
 }
 
@@ -27,6 +27,7 @@ const Keyword[] keywords = {
 	{ "enum", Token.ENUM },
 	{ "foreach", Token.FOREACH },
 	{ "interface", Token.INTERFACE },
+	{ "namespace", Token.NAMESPACE },
 	{ "out", Token.OUT },
 	{ "override", Token.OVERRIDE },
 	{ "private", Token.PRIVATE },
