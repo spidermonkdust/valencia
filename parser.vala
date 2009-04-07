@@ -63,14 +63,15 @@ class Parser {
 					return null;
 			}
 		}
-		do {
+		while (true) {
 			if (accept(Token.QUESTION_MARK) || accept(Token.ASTERISK))
 				continue;
 			if (accept(Token.LEFT_BRACKET)) {
 				accept(Token.RIGHT_BRACKET);
 				continue;
 			}
-		} while (false);
+			break;
+		}
 		return t;
 	}
 	
@@ -308,7 +309,10 @@ class Parser {
 			return null;
 			
 		if (is_enum) {
-			while (!scanner.eof() && accept(Token.ID)) {
+			while (true) {
+				skip_attributes();
+			 	if (!accept(Token.ID))
+			 		break;
 				Field f = new Field(new SimpleName(name), scanner.val(), source, scanner.start, 0);
 				if (accept(Token.EQUALS))
 					skip_expression();

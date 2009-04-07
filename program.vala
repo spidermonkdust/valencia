@@ -96,7 +96,7 @@ interface Scope : Object {
 }
 
 abstract class TypeSymbol : Symbol {
-	public TypeSymbol(string name, SourceFile source, int start, int end) {
+	public TypeSymbol(string? name, SourceFile source, int start, int end) {
 		base(name, source, start, end);
 	}
 }
@@ -310,7 +310,8 @@ class Class : TypeSymbol, Scope {
 	}
 }
 
-class Namespace : Symbol, Scope {
+// A Namespace is a TypeSymbol since namespaces can be used in type names.
+class Namespace : TypeSymbol, Scope {
 	public string full_name;
 	
 	public Namespace(string? name, string? full_name, SourceFile source) {
