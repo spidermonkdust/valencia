@@ -1,6 +1,7 @@
 using Gee;
 
 class Parser {
+	SourceFile source;
 	Scanner scanner;
 	
 	Token peek_token() { return scanner.peek_token(); }
@@ -104,7 +105,7 @@ class Parser {
 		CompoundName type = parse_type();
 		if (type == null || !accept(Token.ID))
 			return null;
-		Parameter p = new Parameter(type, scanner.val(), scanner.start, scanner.end);
+		Parameter p = new Parameter(type, scanner.val(), source, scanner.start, scanner.end);
 		if (accept(Token.EQUALS))
 			skip_expression();
 		return p;
@@ -119,7 +120,7 @@ class Parser {
 			skip();
 			return null;
 		}
-		LocalVariable v = new LocalVariable(type, scanner.val(), scanner.start, scanner.end);
+		LocalVariable v = new LocalVariable(type, scanner.val(), source, scanner.start, scanner.end);
 		skip_expression();
 		if (!accept(Token.RIGHT_PAREN)) {
 			skip();
@@ -137,7 +138,7 @@ class Parser {
 		if (type != null && accept(Token.ID)) {
 			string name = scanner.val();
 			int start = scanner.start;
-			LocalVariable v = new LocalVariable(type, name, start, scanner.end);
+			LocalVariable v = new LocalVariable(type, name, source, start, scanner.end);
 			Token token = peek_token();
 			if (token == Token.SEMICOLON || token == Token.EQUALS) {
 				skip();
@@ -211,7 +212,7 @@ class Parser {
 			return null;
 		}
 		if (peek_token() == Token.LEFT_PAREN && type.to_string() == enclosing_class)
-			return parse_method(new Constructor());
+			return parse_method(new Constructor(source));
 		if (!accept(Token.ID)) {
 			skip();
 			return null;
@@ -219,12 +220,12 @@ class Parser {
 		switch (peek_token()) {
 			case Token.SEMICOLON:
 			case Token.EQUALS:
-				Field f = new Field(type, scanner.val(), scanner.start, 0);
+				Field f = new Field(type, scanner.val(), source, scanner.start, 0);
 				skip();
 				f.end = scanner.end;
 				return f;
 			case Token.LEFT_PAREN:
-				Method m = new Method(scanner.val());
+				Method m = new Method(scanner.val(), source);
 				return parse_method(m);
 			default:
 				skip();
@@ -295,14 +296,14 @@ class Parser {
 			return null;
 		}
 		string name = scanner.val();
-		Class cl = new Class(name);
+		Class cl = new Class(name, source);
 		cl.start = scanner.start;
 		if (!skip_to(Token.LEFT_BRACE))
 			return null;
 			
 		if (is_enum) {
 			while (!scanner.eof() && accept(Token.ID)) {
-				Field f = new Field(new SimpleName(name), scanner.val(), scanner.start, 0);
+				Field f = new Field(new SimpleName(name), scanner.val(), source, scanner.start, 0);
 				if (accept(Token.EQUALS))
 					skip_expression();
 				f.end = scanner.end;
@@ -333,20 +334,19 @@ class Parser {
 		return s;
 	}
 
-	public SourceFile parse(string input) {
+	public void parse(SourceFile source, string input) {
+		this.source = source;
 		scanner = new Scanner(input);
-		SourceFile sf = new SourceFile();
 		while (accept(Token.USING)) {
 			string s = parse_using();
 			if (s != null)
-				sf.using_namespaces.add(s);
+				source.using_namespaces.add(s);
 		}
 		while (!scanner.eof()) {
 			Symbol s = parse_member(null) as Symbol;
 			if (s != null)
-				sf.symbols.add(s);
+				source.symbols.add(s);
 		}
-		return sf;
 	}
 	
 	public CompoundName? name_at(string input, int pos) {
@@ -375,12 +375,14 @@ void main(string[] args) {
         stderr.puts("usage: symbol <file>\n");
         return;
     }
+    string filename = args[1];
     string source;
-    if (!FileUtils.get_contents(args[1], out source)) {
+    if (!FileUtils.get_contents(filename, out source)) {
     	stderr.puts("can't read file\n");
     	return;
     }
-    SourceFile sf = new Parser().parse(source);
+    SourceFile sf = new SourceFile(null, filename);
+    new Parser().parse(sf, source);
     sf.print(0);
 }
 

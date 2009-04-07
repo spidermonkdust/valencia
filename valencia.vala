@@ -1,15 +1,5 @@
 using Gee;
 
-struct Position {
-    public int line;        // line number, starting from 1
-    public int character;   // character in line, starting from 1
-    
-    public Position(int line, int character) {
-        this.line = line;
-        this.character = character;
-    }
-}
-
 void make_pipe(int fd, IOFunc func) throws IOChannelError {
     IOChannel pipe = new IOChannel.unix_new(fd);
     pipe.set_flags(IOFlags.NONBLOCK);
@@ -42,32 +32,31 @@ void append(Gtk.TextBuffer buffer, string text) {
     append_with_tag(buffer, text, null);
 }
 
-void select_line(Gtk.TextBuffer buffer, int line) {
-    Gtk.TextIter iter;
-    buffer.get_iter_at_line(out iter, line - 1);
-    Gtk.TextIter start;
-    Gtk.TextIter end;
-    get_line_start_end(iter, out start, out end);
-    buffer.select_range(start, end);
-}
-
-Gtk.TextIter iter_at_position(Gtk.TextBuffer buffer, Position pos) {
-    // We must be careful: get_iter_at_line_offset() will crash if we give it an
+Gtk.TextIter iter_at_line_offset(Gtk.TextBuffer buffer, int line, int offset) {
+    // We must be careful: TextBuffer.get_iter_at_line_offset() will crash if we give it an
     // offset greater than the length of the line.
     Gtk.TextIter iter;
-    buffer.get_iter_at_line(out iter, pos.line - 1);
+    buffer.get_iter_at_line(out iter, line);
     int len = iter.get_chars_in_line() - 1;     // subtract 1 for \n
     if (len < 0)	// no \n was present, e.g. in an empty file
     	len = 0;
-    int end = int.min(len, pos.character - 1);
+    int end = int.min(len, offset);
     Gtk.TextIter ret;
-    buffer.get_iter_at_line_offset(out ret, pos.line - 1, end);
+    buffer.get_iter_at_line_offset(out ret, line, end);
     return ret;
 }
 
-void select_range(Gtk.TextBuffer buffer, Position start_pos, Position end_pos) {
-    buffer.select_range(iter_at_position(buffer, start_pos),
-                        iter_at_position(buffer, end_pos));
+weak string buffer_contents(Gtk.TextBuffer buffer) {
+    Gtk.TextIter start;
+    Gtk.TextIter end;
+    buffer.get_bounds(out start, out end);
+    return buffer.get_text(start, end, true);
+}
+
+string? filename_to_uri(string filename) {
+    try {
+        return Filename.to_uri(filename);
+    } catch (ConvertError e) { return null; }
 }
 
 string? document_filename(Gedit.Document document) {
@@ -79,28 +68,71 @@ string? document_filename(Gedit.Document document) {
     } catch (ConvertError e) { return null; }
 }
 
-// Navigate to the given file and ensure that the given line is visible.
-// If the file is not already open in gedit, open it in the given window.
-Gedit.Tab? navigate(Gedit.Window window, string filename, int line, out bool is_new) {
-    string uri;
-    try {
-        uri = Filename.to_uri(filename);
-    } catch (ConvertError e) { return null; }
+Gedit.Tab? find_tab(string filename, out Gedit.Window window) {
+    string uri = filename_to_uri(filename);
+    
     foreach (Gedit.Window w in Gedit.App.get_default().get_windows()) {
         Gedit.Tab tab = w.get_tab_from_uri(uri);
-        if (tab == null)
-            continue;
-        w.set_active_tab(tab);
-        Gedit.View view = tab.get_view();
-        Gedit.Document document = tab.get_document();
-        Gtk.TextIter iter;
-        document.get_iter_at_line(out iter, line - 1);
-        view.scroll_to_iter(iter, 0.2, false, 0.0, 0.0);
-        is_new = false;
-        return tab;
-    }
-    is_new = true;
-    return window.create_tab_from_uri(uri, null, line, false, true);
+		if (tab != null) {
+			window = w;
+			return tab;
+		}
+	}
+	return null;
+}
+
+abstract class Destination {
+	public abstract void get_range(Gtk.TextBuffer buffer,
+								   out Gtk.TextIter start, out Gtk.TextIter end);
+}
+
+class LineNumber : Destination {
+	int line;	// starting from 0
+	
+	public LineNumber(int line) { this.line = line; }
+	
+	public override void get_range(Gtk.TextBuffer buffer,
+								   out Gtk.TextIter start, out Gtk.TextIter end) {
+		Gtk.TextIter iter;
+		buffer.get_iter_at_line(out iter, line);
+		get_line_start_end(iter, out start, out end);
+	}
+}
+
+class LineCharRange : Destination {
+	int start_line;		// starting from 0
+	int start_char;
+	int end_line;
+	int end_char;
+	
+	public LineCharRange(int start_line, int start_char, int end_line, int end_char) {
+		this.start_line = start_line;
+		this.start_char = start_char;
+		this.end_line = end_line;
+		this.end_char = end_char;
+	}
+	
+	public override void get_range(Gtk.TextBuffer buffer,
+								   out Gtk.TextIter start, out Gtk.TextIter end) {
+	    start = iter_at_line_offset(buffer, start_line, start_char);
+	    end = iter_at_line_offset(buffer, end_line, end_char);
+	}
+}
+
+class CharRange : Destination {
+	int start_char;
+	int end_char;
+	
+	public CharRange(int start_char, int end_char) {
+		this.start_char = start_char;
+		this.end_char = end_char;
+	}
+	
+	public override void get_range(Gtk.TextBuffer buffer,
+								   out Gtk.TextIter start, out Gtk.TextIter end) {
+		buffer.get_iter_at_offset(out start, start_char);
+		buffer.get_iter_at_offset(out end, end_char);
+	}	
 }
 
 class Instance {
@@ -124,8 +156,7 @@ class Instance {
     Regex error_regex;
     
     string target_filename;
-    Position target_start;
-    Position target_end;
+    Destination destination;
     
     const Gtk.ActionEntry[] entries = {
         { "SearchGoToDefinition", null, "Go to _Definition", "F12",
@@ -188,7 +219,31 @@ class Instance {
         ui_id = manager.add_ui_from_string(ui, -1);
         
         init_error_regex();
+        
+        Signal.connect(window, "tab-added", (Callback) tab_added_callback, this);
+        Signal.connect(window, "tab-removed", (Callback) tab_removed_callback, this);
     }
+
+	static void tab_added_callback(Gedit.Window window, Gedit.Tab tab, Instance instance) {
+		Gedit.Document document = tab.get_document();
+		Signal.connect(document, "saved", (Callback) all_save_callback, instance);
+	}
+	
+	static void tab_removed_callback(Gedit.Window window, Gedit.Tab tab, Instance instance) {
+		Gedit.Document document = tab.get_document();
+		if (document.get_modified()) {
+			// We're closing a document without saving changes.  Reparse the symbol tree
+			// from the source file on disk.
+			string path = document_filename(document);
+			Program.update_any(path, null);
+		}
+	}
+	
+	// TODO: Merge this method with saved_callback, below.
+    static void all_save_callback(Gedit.Document document, void *arg1, Instance instance) {
+		string path = document_filename(document);
+   		Program.update_any(path, buffer_contents(document));
+	}	
     
     bool scroll_to_end() {
         Gtk.TextIter end;
@@ -307,17 +362,24 @@ class Instance {
             build();
     }
     
-    void select(Gedit.Document document, Position start, Position end) {
-        if (start.character != 0)
-            select_range(document, start, end);
-        else select_line(document, start.line);
+    void go(Gedit.Tab tab, Destination dest) {
+	    Gedit.Document document = tab.get_document();
+	    Gtk.TextIter start;
+	    Gtk.TextIter end;
+	    dest.get_range(document, out start, out end);
+        document.select_range(start, end);
+        
+	    Gedit.View view = tab.get_view();
+	    view.scroll_to_iter(start, 0.2, false, 0.0, 0.0);
+        view.grab_focus();
     }
     
     void on_document_loaded(Gedit.Document document) {
         if (document_filename(document) == target_filename) {
-            select(document, target_start, target_end);
+        	Gedit.Tab tab = Gedit.Tab.get_from_document(document);
+            go(tab, destination);
             target_filename = null;
-            target_start.line = 0;
+            destination = null;
         }
     }
 
@@ -325,20 +387,19 @@ class Instance {
         instance.on_document_loaded(document);
     }
 
-    void jump(string filename, Position start, Position end) {
-        bool is_new;
-        Gedit.Tab tab = navigate(window, filename, start.line, out is_new);
-        Gedit.Document document = tab.get_document();
-        if (is_new) {
-            target_filename = filename;
-            target_start = start;
-            target_end = end;
-            Signal.connect(document, "loaded", (Callback) document_loaded_callback, this);
-        }
-        else {
-            select(document, start, end);
-            tab.get_view().grab_focus();
-        }
+    void jump(string filename, Destination dest) {
+		Gedit.Window w;
+		Gedit.Tab tab = find_tab(filename, out w);
+		if (tab != null) {
+		    w.set_active_tab(tab);
+		    go(tab, dest);
+            return;
+		}
+		
+		tab = window.create_tab_from_uri(filename_to_uri(filename), null, 0, false, true);
+        target_filename = filename;
+        destination = dest;
+        Signal.connect(tab.get_document(), "loaded", (Callback) document_loaded_callback, this);
     }
     
     // We look for two kinds of error lines:
@@ -423,37 +484,40 @@ class Instance {
         
         string filename = Path.build_filename(build_directory, info.filename);
         int line_number = info.start_line.to_int();
-        if (info.start_char == null)     // line number only
-            jump(filename, Position(line_number, 0), Position(0, 0));
-        else {
-            Position start_pos = Position(line_number, info.start_char.to_int());
-            Position end_pos = Position(info.end_line.to_int(), info.end_char.to_int() + 1);
-            jump(filename, start_pos, end_pos);
-        }
+        Destination dest;
+        if (info.start_char == null)
+        	dest = new LineNumber(line_number - 1);
+        else
+        	dest = new LineCharRange(line_number - 1, info.start_char.to_int() - 1,
+        					         info.end_line.to_int() - 1, info.end_char.to_int());
+        jump(filename, dest);
         return true;
     }
 
     void on_go_to_definition() {
         Gedit.Document document = window.get_active_document();
+        string filename = document_filename(document);
+        Program program = Program.find_containing(filename);
+
+		// Reparse any modified documents in this program.
+	    foreach (Gedit.Document d in Gedit.App.get_default().get_documents())
+	    	if (d.get_modified()) {
+	    		string path = document_filename(d);
+	    		if (path != null)
+		    		program.update(path, buffer_contents(d));
+	    	}
+        
+        weak string source = buffer_contents(document);
         int pos = get_insert_iter(document).get_offset();
+        CompoundName name = new Parser().name_at(source, pos);
         
-        Gtk.TextIter start;
-        Gtk.TextIter end;
-        document.get_bounds(out start, out end);
-        weak string source = document.get_text(start, end, true);
-        Parser parser = new Parser();
-        CompoundName name = parser.name_at(source, pos);
-        
-        SourceFile sf = parser.parse(source);
+        SourceFile sf = program.find_source(filename);
 		Symbol sym = sf.resolve(name, pos);
 		if (sym == null)
 			return;
 		
-		document.get_iter_at_offset(out start, sym.start);
-		document.get_iter_at_offset(out end, sym.start + (int) sym.name.length);
-		Gedit.View view = window.get_active_view();
-        view.scroll_to_iter(start, 0.2, false, 0.0, 0.0);
-        document.select_range(start, end);
+		SourceFile dest = sym.source;
+		jump(dest.filename, new CharRange(sym.start, sym.start + (int) sym.name.length));
 	}
 
     public void update_ui() {

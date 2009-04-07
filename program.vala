@@ -46,7 +46,7 @@ abstract class Node : Object {
 		return a;
 	}
 	
-	Chain? find1(Chain? parent, int pos) {
+	public Chain? find(Chain? parent, int pos) {
 		Chain c = parent;
 		Scope s = this as Scope;
 		if (s != null)
@@ -56,11 +56,9 @@ abstract class Node : Object {
 		if (nodes != null)
 			foreach (Node n in nodes)
 				if (n.start <= pos && pos <= n.end)
-					return n.find1(c, pos);
+					return n.find(c, pos);
 		return c;
 	}
-	
-	protected Chain? find(int pos) { return find1(null, pos); }
 	
 	public static Symbol? lookup_in_array(ArrayList<Node> a, string name) {
 		foreach (Node n in a) {
@@ -79,10 +77,12 @@ abstract class Node : Object {
 }
 
 abstract class Symbol : Node {
+	public SourceFile source;
 	public string name;		// symbol name, or null for a constructor
 	
-	public Symbol(string? name, int start, int end) {
+	public Symbol(string? name, SourceFile source, int start, int end) {
 		base(start, end);
+		this.source = source;
 		this.name = name;
 	}
 	
@@ -96,7 +96,9 @@ interface Scope : Object {
 }
 
 abstract class TypeSymbol : Symbol {
-	public TypeSymbol(string name, int start, int end) { base(name, start, end); }
+	public TypeSymbol(string name, SourceFile source, int start, int end) {
+		base(name, source, start, end);
+	}
 }
 
 abstract class Statement : Node {
@@ -108,8 +110,8 @@ abstract class Statement : Node {
 abstract class Variable : Symbol {
 	public CompoundName type;
 	
-	public Variable(CompoundName type, string name, int start, int end) {
-		base(name, start, end);
+	public Variable(CompoundName type, string name, SourceFile source, int start, int end) {
+		base(name, source, start, end);
 		this.type = type;
 	}
 	
@@ -121,8 +123,8 @@ abstract class Variable : Symbol {
 }
 
 class LocalVariable : Variable {
-	public LocalVariable(CompoundName type, string name, int start, int end) {
-		base(type, name, start, end);
+	public LocalVariable(CompoundName type, string name, SourceFile source, int start, int end) {
+		base(type, name, source, start, end);
 	}
 	
 	protected override string kind() { return "local"; }
@@ -219,8 +221,8 @@ class Block : Statement, Scope {
 }
 
 class Parameter : Variable {
-	public Parameter(CompoundName type, string name, int start, int end) {
-		base(type, name, start, end);
+	public Parameter(CompoundName type, string name, SourceFile source, int start, int end) {
+		base(type, name, source, start, end);
 	}
 	
 	protected override string kind() { return "parameter"; }
@@ -250,7 +252,7 @@ class Method : Symbol, Scope {
 	public ArrayList<Parameter> parameters = new ArrayList<Parameter>();
 	public Block body;
 	
-	public Method(string? name) { base(name, 0, 0); }
+	public Method(string? name, SourceFile source) { base(name, source, 0, 0); }
 	
 	public override ArrayList<Node>? children() {
 		return single_node(body);
@@ -275,7 +277,7 @@ class Method : Symbol, Scope {
 }
 
 class Constructor : Method {
-	public Constructor() { base(null); }
+	public Constructor(SourceFile source) { base(null, source); }
 	
 	public override void print_type(int level) {
 		do_print(level, "constructor");
@@ -283,8 +285,8 @@ class Constructor : Method {
 }
 
 class Field : Variable {
-	public Field(CompoundName type, string name, int start, int end) {
-		base(type, name, start, end);
+	public Field(CompoundName type, string name, SourceFile source, int start, int end) {
+		base(type, name, source, start, end);
 	}
 	
 	protected override string kind() { return "field"; }
@@ -294,7 +296,7 @@ class Field : Variable {
 class Class : TypeSymbol, Scope {
 	public ArrayList<Node> members = new ArrayList<Node>();
 	
-	public Class(string name) { base(name, 0, 0); }
+	public Class(string name, SourceFile source) { base(name, source, 0, 0); }
 	
 	public override ArrayList<Node>? children() { return members; }
 	
@@ -310,16 +312,86 @@ class Class : TypeSymbol, Scope {
 	}
 }
 
-class SourceFile : Node, Scope {
+class SourceFile : Node {
+	weak Program program;
+	public string filename;
+	
 	public ArrayList<string> using_namespaces = new ArrayList<string>();
 	public ArrayList<Symbol> symbols = new ArrayList<Symbol>();
 	
+	public SourceFile(Program? program, string filename) {
+		this.program = program;
+		this.filename = filename;
+	}
+	
 	public override ArrayList<Node>? children() { return symbols; }
 
-	Symbol? lookup(string name, int pos) {
+	public void clear() {
+		using_namespaces.clear();
+		symbols.clear();
+	}
+
+	public Symbol? lookup(string name) {
 		return Node.lookup_in_array(symbols, name);
 	}
 
+	public Symbol? resolve(CompoundName name, int pos) {
+		return program.resolve(name, this, pos);
+	}
+
+	public override void print(int level) {
+		foreach (Symbol s in symbols)
+			s.print(level);
+	}
+}
+
+class Program : Object, Scope {
+	string directory;
+	ArrayList<SourceFile> sources = new ArrayList<SourceFile>();
+	
+	static ArrayList<Program> programs;
+	
+	Program(string directory) {
+		this.directory = directory;
+		Dir dir = Dir.open(directory);
+		Parser parser = new Parser();
+		while (true) {
+			string file = dir.read_name();
+			if (file == null)
+				break;
+			if (is_vala(file)) {
+				string path = Path.build_filename(directory, file);
+				SourceFile source = new SourceFile(this, path);
+				string contents;
+				FileUtils.get_contents(path, out contents);
+				parser.parse(source, contents);
+				sources.add(source);
+			}
+		}
+		
+		programs.add(this);
+	}
+	
+	static bool is_vala(string filename) { return filename.has_suffix(".vala"); }
+	
+	Symbol? lookup(string name, int pos) {
+		foreach (SourceFile source in sources) {
+			Symbol s = source.lookup(name);
+			if (s != null)
+				return s;
+		}
+		return null;
+	}
+
+	Chain position_chain(SourceFile source, int pos) {
+		Chain top = new Chain(this, null);
+		return source.find(top, pos);
+	}
+
+	Chain? symbol_chain(Symbol symbol) {
+		return position_chain(symbol.source, symbol.start);
+	}
+	
 	TypeSymbol? resolve_type(CompoundName name, Chain chain) {
 		SimpleName s = name as SimpleName;
 		if (s == null)
@@ -327,25 +399,77 @@ class SourceFile : Node, Scope {
 		return chain.lookup_type(s.name);
 	}
 
-	public Symbol? resolve(CompoundName name, int pos) {
+	public Symbol? resolve(CompoundName name, SourceFile source, int pos) {
 		SimpleName s = name as SimpleName;
 		if (s != null) {
-			Chain c = find(pos);
+			Chain c = position_chain(source, pos);
 			return c.lookup(s.name, pos);
 		}
 		
 		QualifiedName q = (QualifiedName) name;
-		Symbol left = resolve(q.basename, pos);
+		Symbol left = resolve(q.basename, source, pos);
 		Variable v = left as Variable;
 		if (v != null)
-			left = resolve_type(v.type, find(v.start));
+			left = resolve_type(v.type, symbol_chain(v));
 		Scope scope = left as Scope;
 		return scope == null ? null : scope.lookup(q.name, 0);
 	}
 
-	public override void print(int level) {
-		foreach (Symbol s in symbols)
-			s.print(level);
+	public SourceFile? find_source(string path) {
+		foreach (SourceFile source in sources)
+			if (source.filename == path)
+				return source;
+		return null;
+	}
+	
+	// Update the text of a (possibly new) source file in this program.
+	void update1(string path, string contents) {
+		SourceFile source = find_source(path);
+		if (source == null) {
+			source = new SourceFile(this, path);
+			sources.add(source);
+		} else source.clear();
+		new Parser().parse(source, contents);
+	}
+	
+	public void update(string path, string contents) {
+		if (is_vala(path) && Path.get_dirname(path) == directory)
+			update1(path, contents);
+	}
+	
+	static Program? find_program(string dir) {
+		if (programs == null)
+			programs = new ArrayList<Program>();
+			
+		foreach (Program p in programs)
+			if (p.directory == dir)
+				return p;
+		return null;
+	}
+	
+	public static Program find_containing(string path) {
+		string dir = Path.get_dirname(path);
+		Program p = find_program(dir);
+		return p != null ? p : new Program(dir);
+	}
+
+	// Update the text of a (possibly new) source file in any existing program.
+	// If (contents) is null, we read the file's contents from disk.
+	public static void update_any(string path, string? contents) {
+		if (path == null || !is_vala(path))
+			return;
+		string dir = Path.get_dirname(path);
+		Program p = find_program(dir);
+		if (p != null) {
+			string contents1;		// owning variable
+			if (contents == null) {
+				try {
+					FileUtils.get_contents(path, out contents1);
+				} catch (FileError e) { return; }
+				contents = contents1;
+			}
+			p.update1(path, contents);
+		}
 	}
 }
 
