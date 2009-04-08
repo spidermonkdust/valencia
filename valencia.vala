@@ -515,6 +515,8 @@ class Instance {
         weak string source = buffer_contents(document);
         int pos = get_insert_iter(document).get_offset();
         CompoundName name = new Parser().name_at(source, pos);
+        if (name == null)
+        	return;
         
         SourceFile sf = program.find_source(filename);
 		Symbol sym = sf.resolve(name, pos);
