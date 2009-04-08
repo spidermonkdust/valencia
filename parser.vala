@@ -102,8 +102,10 @@ class Parser {
 	
 	Parameter? parse_parameter() {
 		Token t = peek_token();
-		if (t == Token.OUT || t == Token.REF)
+		if (t == Token.OUT || t == Token.REF) {
 			next_token();
+			accept(Token.WEAK);
+		}
 		CompoundName type = parse_type();
 		if (type == null || !accept(Token.ID))
 			return null;
