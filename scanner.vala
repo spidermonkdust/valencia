@@ -2,8 +2,9 @@ enum Token {
 	NONE,
 	EOF,
 	CHAR,	// an unrecognized punctuation character
-	ID,
 	CHAR_LITERAL,	// a literal such as 'x'
+	STRING_LITERAL,
+	ID,
 	
 	// punctuation characters
 	ASTERISK, LEFT_BRACE, RIGHT_BRACE, LEFT_BRACKET, RIGHT_BRACKET, COMMA, EQUALS,
@@ -69,14 +70,16 @@ class Scanner {
 		++input_pos;
 	}
 	
+	unichar peek_char() { return input.get_char(); }
+	
 	unichar next_char() {
-		unichar c = input.get_char();
+		unichar c = peek_char();
 		advance();
 		return c;
 	}
 	
 	bool accept(unichar c) {
-		if (input.get_char() == c) {
+		if (peek_char() == c) {
 			advance();
 			return true;
 		}
@@ -94,6 +97,13 @@ class Scanner {
 		return p == input && *q == 0;
 	}
 	
+	// Read characters until we reach a triple quote (""") string terminator.
+	void read_triple_string() {
+		while (input != "")
+			if (next_char() == '"' && accept('"') && accept('"'))
+				return;
+	}
+	
 	Token read_token() {
 		while (input != "") {
 			token_start_char = input;
@@ -103,7 +113,7 @@ class Scanner {
 				continue;
 			if (c.isalpha() || c == '_') {		// identifier start
 				while (true) {
-					c = input.get_char();
+					c = peek_char();
 					if (!c.isalnum() && c != '_')
 						break;
 					advance();
@@ -115,7 +125,7 @@ class Scanner {
 			}
 			switch (c) {
 				case '/':
-					unichar d = input.get_char();
+					unichar d = peek_char();
 					if (d == '/') {    // single-line comment
 						while (input != "" && next_char() != '\n')
 							;
@@ -124,7 +134,7 @@ class Scanner {
 					if (d == '*') {	   // multi-line comment
 						advance();	// move past '*'
 						while (input != "") { 
-							if (next_char() == '*' && input.get_char() == '/') {
+							if (next_char() == '*' && peek_char() == '/') {
 								advance();	// move past '/'
 								break;
 							}
@@ -132,6 +142,20 @@ class Scanner {
 						continue;
 					}
 					return Token.CHAR;
+				case '"':
+					if (accept('"')) {	    // ""
+						if (accept('"'))	// """
+							read_triple_string();
+					} else {
+						while (input != "") {
+							unichar d = next_char();
+							if (d == '"' || d == '\n')
+								break;
+							else if (d == '\'')	// escape sequence
+								advance();
+						}
+					}
+					return Token.STRING_LITERAL;
 				case '\'':
 					accept('\\');	// optional backslash beginning escape sequence
 					advance();
