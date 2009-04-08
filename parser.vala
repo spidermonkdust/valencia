@@ -16,13 +16,6 @@ class Parser {
 		return false;
 	}
 	
-	bool skip_to(Token t) {
-		while (!scanner.eof())
-			if (next_token() == t)
-				return true;
-		return false;
-	}
-	
 	// Skip to a right brace or semicolon.
 	void skip() {
 		int depth = 0;
@@ -307,7 +300,18 @@ class Parser {
 		string name = scanner.val();
 		Class cl = new Class(name, source);
 		cl.start = scanner.start;
-		if (!skip_to(Token.LEFT_BRACE))
+		if (accept(Token.COLON))
+			while (true) {
+				CompoundName type = parse_type();
+				if (type == null) {
+					skip();
+					return null;
+				}
+				cl.super.add(type);
+				if (!accept(Token.COMMA))
+					break;
+			}
+		if (!accept(Token.LEFT_BRACE))
 			return null;
 			
 		if (is_enum) {

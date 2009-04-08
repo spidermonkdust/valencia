@@ -292,18 +292,50 @@ class Field : Variable {
 
 // a class, struct, interface or enum
 class Class : TypeSymbol, Scope {
+	public ArrayList<CompoundName> super = new ArrayList<CompoundName>();
 	public ArrayList<Node> members = new ArrayList<Node>();
 	
 	public Class(string name, SourceFile source) { base(name, source, 0, 0); }
 	
 	public override ArrayList<Node>? children() { return members; }
 	
+	Symbol? lookup1(string name, HashSet<Class> seen) {
+		Symbol sym = Node.lookup_in_array(members, name);
+		if (sym != null)
+			return sym;
+
+		// look in superclasses
+		
+		seen.add(this);
+		
+		foreach (CompoundName s in super) {
+			// We look up the parent class in the scope at (start - 1); that excludes
+			// this class itself (but will include the containing sourcefile,
+			// even if start == 0.)
+			Class c = source.resolve_type(s, start - 1) as Class;
+			
+			if (c != null && !seen.contains(c)) {
+				sym = c.lookup1(name, seen);
+				if (sym != null)
+					return sym;
+			}
+		}
+		return null;
+		
+	}	
+	
 	Symbol? lookup(string name, int pos) {
-		return Node.lookup_in_array(members, name);
+		return lookup1(name, new HashSet<Class>());
 	}
 	
 	public override void print(int level) {
-		print_name(level, "class");
+		StringBuilder sb = new StringBuilder();
+		sb.append("class " + name);
+		for (int i = 0 ; i < super.size ; ++i) {
+			sb.append(i == 0 ? " : " : ", ");
+			sb.append(super.get(i).to_string());
+		}
+		do_print(level, sb.str);
 		
 		foreach (Node n in members)
 			n.print(level + 1);
@@ -374,10 +406,6 @@ class SourceFile : Node, Scope {
 		return null;
 	}
 
-	static Chain? symbol_chain(Symbol symbol) {
-		return symbol.source.find(null, symbol.start);
-	}
-	
 	public Symbol? resolve1(CompoundName name, Chain chain, int pos, bool find_type) {
 		SimpleName s = name as SimpleName;
 		if (s != null)
@@ -388,7 +416,7 @@ class SourceFile : Node, Scope {
 		if (!find_type) {
 			Variable v = left as Variable;
 			if (v != null)
-				left = resolve1(v.type, symbol_chain(v), 0, true);
+				left = v.source.resolve_type(v.type, v.start);
 		}
 		Scope scope = left as Scope;
 		return scope == null ? null : scope.lookup(q.name, 0);
@@ -397,6 +425,10 @@ class SourceFile : Node, Scope {
 	public Symbol? resolve(CompoundName name, int pos) {
 		return resolve1(name, find(null, pos), pos, false);
 	}	
+	
+	public Symbol? resolve_type(CompoundName type, int pos) {
+		return resolve1(type, find(null, pos), 0, true);
+	}
 	
 	public override void print(int level) {
 		top.print(level);

@@ -7,7 +7,7 @@ enum Token {
 	ID,
 	
 	// punctuation characters
-	ASTERISK, LEFT_BRACE, RIGHT_BRACE, LEFT_BRACKET, RIGHT_BRACKET, COMMA, EQUALS,
+	ASTERISK, LEFT_BRACE, RIGHT_BRACE, LEFT_BRACKET, RIGHT_BRACKET, COLON, COMMA, EQUALS,
 	LEFT_PAREN, RIGHT_PAREN, PERIOD, QUESTION_MARK, SEMICOLON, LESS_THAN, GREATER_THAN,
 	
 	// keywords
@@ -166,6 +166,7 @@ class Scanner {
 				case '}': return Token.RIGHT_BRACE;
 				case '[': return Token.LEFT_BRACKET;
 				case ']': return Token.RIGHT_BRACKET;
+				case ':': return Token.COLON;
 				case ',': return Token.COMMA;
 				case '=': return Token.EQUALS;
 				case '(': return Token.LEFT_PAREN;
