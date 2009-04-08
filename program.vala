@@ -430,8 +430,10 @@ class Program : Object {
 		programs.add(this);
 	}
 	
-	static bool is_vala(string filename) {
-		return filename.has_suffix(".vala") || filename.has_suffix(".vapi");
+	public static bool is_vala(string filename) {
+		return filename.has_suffix(".vala") ||
+		       filename.has_suffix(".vapi") ||
+		       filename.has_suffix(".cs");	// C#
 	}
 	
 	public Symbol? lookup_in_namespace(string? namespace_name, string name) {
@@ -486,7 +488,7 @@ class Program : Object {
 	// Update the text of a (possibly new) source file in any existing program.
 	// If (contents) is null, we read the file's contents from disk.
 	public static void update_any(string path, string? contents) {
-		if (path == null || !is_vala(path))
+		if (!is_vala(path))
 			return;
 		string dir = Path.get_dirname(path);
 		Program p = find_program(dir);

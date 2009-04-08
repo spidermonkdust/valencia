@@ -138,6 +138,7 @@ class CharRange : Destination {
 class Instance {
     public Gedit.Window window;
     Gtk.ActionGroup action_group;
+    Gtk.Action go_to_definition_action;
     Gtk.Action build_action;
     uint ui_id;
     
@@ -212,6 +213,7 @@ class Instance {
         
         action_group = new Gtk.ActionGroup("valencia");
         action_group.add_actions(entries, this);
+        go_to_definition_action = action_group.get_action("SearchGoToDefinition");
         build_action = action_group.get_action("ProjectBuild");
         update_ui();
         manager.insert_action_group(action_group, 0);
@@ -235,7 +237,8 @@ class Instance {
 			// We're closing a document without saving changes.  Reparse the symbol tree
 			// from the source file on disk.
 			string path = document_filename(document);
-			Program.update_any(path, null);
+			if (path != null)
+				Program.update_any(path, null);
 		}
 	}
 	
@@ -497,6 +500,8 @@ class Instance {
     void on_go_to_definition() {
         Gedit.Document document = window.get_active_document();
         string filename = document_filename(document);
+        if (filename == null)
+        	return;
         Program program = Program.find_containing(filename);
 
 		// Reparse any modified documents in this program.
@@ -522,7 +527,9 @@ class Instance {
 
     public void update_ui() {
         Gedit.Document document = window.get_active_document();
-        build_action.set_sensitive(document != null && document_filename(document) != null);
+        string filename = document == null ? null : document_filename(document);
+        build_action.set_sensitive(filename != null);
+        go_to_definition_action.set_sensitive(filename != null && Program.is_vala(filename));
     }
 
     public void deactivate() {
