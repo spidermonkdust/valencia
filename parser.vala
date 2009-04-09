@@ -274,8 +274,10 @@ class Parser {
 		Token t = peek_token();
 		switch (t) {
 			case Token.NAMESPACE:
-				if (enclosing_class == null)
+				if (enclosing_class == null) {
+					next_token();	// move past 'namespace'
 					return parse_namespace();
+				}
 				skip();
 				return null;
 			case Token.CLASS:
@@ -345,30 +347,39 @@ class Parser {
 	}
 
 	Namespace? parse_namespace() {
-		next_token();	// move past 'namespace'
 		if (!accept(Token.ID)) {
 			skip();
 			return null;
 		}
+		
 		string name = scanner.val();
 		Namespace n = new Namespace(name, join(current_namespace.full_name, name), source);
 		n.start = scanner.start;
-		if (!accept(Token.LEFT_BRACE)) {
-			skip();
-			return null;
-		}
-			
+		
 		Namespace parent = current_namespace;
 		current_namespace = n;
 		
-		while (!scanner.eof() && !accept(Token.RIGHT_BRACE)) {
-			Symbol s = parse_member(null) as Symbol;
-			if (s != null)
-				n.symbols.add(s);
+		if (accept(Token.PERIOD)) {
+			Namespace inner = parse_namespace();
+			if (inner == null)
+				n = null;
+			else n.symbols.add(inner);
+		} else if (accept(Token.LEFT_BRACE)) {
+			while (!scanner.eof() && !accept(Token.RIGHT_BRACE)) {
+				Symbol s = parse_member(null) as Symbol;
+				if (s != null)
+					n.symbols.add(s);
+			}
+		} else {
+			skip();
+			n = null;
+		}
+
+		if (n != null) {		
+			source.namespaces.add(n);
+			n.end = scanner.end;
 		}
 		
-		n.end = scanner.end;
-		source.namespaces.add(n);
 		current_namespace = parent;
 		return n;
 	}
