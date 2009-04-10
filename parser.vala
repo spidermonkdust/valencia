@@ -283,9 +283,9 @@ class Parser {
 			case Token.CLASS:
 			case Token.INTERFACE:
 			case Token.STRUCT:
-				return parse_class(false);
 			case Token.ENUM:
-				return parse_class(true);
+				next_token();
+				return parse_class(t == Token.ENUM);
 			case Token.CONSTRUCT:
 				return parse_construct();
 			default:
@@ -293,13 +293,34 @@ class Parser {
 		}
 	}
 
-	Class? parse_class(bool is_enum) {
-		next_token();	// move past 'class' or 'enum'
+	Namespace? parse_containing_namespace(string name, bool is_enum) {
+		Namespace n = open_namespace(name);
+
+		Namespace parent = current_namespace;
+		current_namespace = n;
+		
+		TypeSymbol inner = parse_class(is_enum);
+		if (inner == null)
+			n = null;
+		else {
+			n.symbols.add(inner);
+			close_namespace(n);
+		}
+		
+		current_namespace = parent;
+		return n;
+	}
+
+	TypeSymbol? parse_class(bool is_enum) {
 		if (!accept(Token.ID)) {
 			skip();
 			return null;
 		}
 		string name = scanner.val();
+		
+		if (accept(Token.PERIOD))
+			return parse_containing_namespace(name, is_enum);
+		
 		Class cl = new Class(name, source);
 		cl.start = scanner.start;
 		if (accept(Token.COLON))
@@ -346,6 +367,17 @@ class Parser {
 		return a == null ? b : a + "." + b;
 	}
 
+	Namespace open_namespace(string name) {
+		Namespace n = new Namespace(name, join(current_namespace.full_name, name), source);
+		n.start = scanner.start;
+		return n;
+	}
+	
+	void close_namespace(Namespace n) {
+		source.namespaces.add(n);
+		n.end = scanner.end;
+	}
+
 	Namespace? parse_namespace() {
 		if (!accept(Token.ID)) {
 			skip();
@@ -353,8 +385,7 @@ class Parser {
 		}
 		
 		string name = scanner.val();
-		Namespace n = new Namespace(name, join(current_namespace.full_name, name), source);
-		n.start = scanner.start;
+		Namespace n = open_namespace(name);
 		
 		Namespace parent = current_namespace;
 		current_namespace = n;
@@ -375,10 +406,8 @@ class Parser {
 			n = null;
 		}
 
-		if (n != null) {		
-			source.namespaces.add(n);
-			n.end = scanner.end;
-		}
+		if (n != null)
+			close_namespace(n);	
 		
 		current_namespace = parent;
 		return n;
