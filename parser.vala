@@ -108,6 +108,24 @@ class Parser {
 		return p;
 	}
 	
+	// Parse an expression, returning the expression's type if known.
+	CompoundName? parse_expression() {
+		if (accept(Token.NEW)) {
+			CompoundName type = parse_type();
+			if (accept(Token.LEFT_PAREN)) {
+				while (true) {
+					skip_expression();
+					if (!accept(Token.COMMA))
+						break;
+				}
+				if (accept(Token.RIGHT_PAREN) && peek_token() == Token.SEMICOLON)
+					return type;
+			}
+		}
+		skip_expression();
+		return null;
+	}
+	
 	ForEach? parse_foreach() {
 		int start = scanner.start;
 		if (!accept(Token.LEFT_PAREN))
@@ -136,11 +154,13 @@ class Parser {
 			string name = scanner.val();
 			int start = scanner.start;
 			LocalVariable v = new LocalVariable(type, name, source, start, scanner.end);
-			Token token = peek_token();
-			if (token == Token.SEMICOLON || token == Token.EQUALS) {
-				skip();
-				return new DeclarationStatement(v, start, scanner.end);
+			if (accept(Token.EQUALS)) {
+				type = parse_expression();
+				if (v.type.to_string() == "var" && type != null)
+					v.type = type;
 			}
+			if (accept(Token.SEMICOLON))
+				return new DeclarationStatement(v, start, scanner.end);
 		}
 		
 		// We found no declaration.  Scan through the remainder of the
