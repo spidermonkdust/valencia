@@ -8,11 +8,11 @@ enum Token {
 	
 	// punctuation characters
 	ASTERISK, LEFT_BRACE, RIGHT_BRACE, LEFT_BRACKET, RIGHT_BRACKET, COLON, COMMA, EQUALS,
-	LEFT_PAREN, RIGHT_PAREN, PERIOD, QUESTION_MARK, SEMICOLON, LESS_THAN, GREATER_THAN,
+	HASH, LEFT_PAREN, RIGHT_PAREN, PERIOD, QUESTION_MARK, SEMICOLON, LESS_THAN, GREATER_THAN,
 	
 	// keywords
-	ABSTRACT, CLASS, CONST, CONSTRUCT, ENUM, FOREACH, INTERFACE, NAMESPACE, NEW, OUT, OVERRIDE,
-	PRIVATE, PROTECTED, PUBLIC,	REF, RETURN, STATIC, STRUCT, USING, VIRTUAL, WEAK
+	ABSTRACT, CLASS, CONST, CONSTRUCT, DELEGATE, ENUM, FOREACH, INTERFACE, NAMESPACE, NEW, OUT,
+	OVERRIDE, PRIVATE, PROTECTED, PUBLIC, REF, RETURN, STATIC, STRUCT, USING, VIRTUAL, WEAK
 }
 
 struct Keyword {
@@ -25,6 +25,7 @@ const Keyword[] keywords = {
 	{ "class", Token.CLASS },
 	{ "const", Token.CONST },
 	{ "construct", Token.CONSTRUCT },
+	{ "delegate", Token.DELEGATE },
 	{ "enum", Token.ENUM },
 	{ "foreach", Token.FOREACH },
 	{ "interface", Token.INTERFACE },
@@ -170,6 +171,7 @@ class Scanner {
 				case ':': return Token.COLON;
 				case ',': return Token.COMMA;
 				case '=': return Token.EQUALS;
+				case '#': return Token.HASH;
 				case '(': return Token.LEFT_PAREN;
 				case ')': return Token.RIGHT_PAREN;
 				case '.': return Token.PERIOD;

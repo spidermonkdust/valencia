@@ -57,7 +57,7 @@ class Parser {
 			}
 		}
 		while (true) {
-			if (accept(Token.QUESTION_MARK) || accept(Token.ASTERISK))
+			if (accept(Token.QUESTION_MARK) || accept(Token.ASTERISK) || accept(Token.HASH))
 				continue;
 			if (accept(Token.LEFT_BRACKET)) {
 				accept(Token.RIGHT_BRACKET);
@@ -254,6 +254,7 @@ class Parser {
 		switch (t) {
 			case Token.ABSTRACT:
 			case Token.CONST:
+			case Token.DELEGATE:
 			case Token.OVERRIDE:
 			case Token.PRIVATE:
 			case Token.PROTECTED:
