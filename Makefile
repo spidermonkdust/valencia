@@ -1,6 +1,7 @@
 SOURCES = parser.vala program.vala scanner.vala valencia.vala
 
 libvalencia.so: $(SOURCES)
+	pkg-config --exists gedit-2.20
 	valac -X --shared -X -fPIC --vapidir=. --pkg gee-1.0 --pkg gedit-2.20 $^ -o $@
 
 install:
