@@ -139,6 +139,7 @@ class Instance {
     public Gedit.Window window;
     Gtk.ActionGroup action_group;
     Gtk.Action go_to_definition_action;
+    Gtk.Action go_back_action;
     Gtk.Action build_action;
     uint ui_id;
     
@@ -158,10 +159,15 @@ class Instance {
     
     string target_filename;
     Destination destination;
+
+    static ArrayList<Gtk.TextMark> history;
+    const int MAX_HISTORY = 10;
     
     const Gtk.ActionEntry[] entries = {
         { "SearchGoToDefinition", null, "Go to _Definition", "F12",
           "Jump to a symbol's definition", on_go_to_definition },
+        { "SearchGoBack", Gtk.STOCK_GO_BACK, "Go _Back", "<alt>Left",
+          "Go back after jumping to a definition", on_go_back },
         
 	    { "Project", null, "_Project" },   // top-level menu
 
@@ -175,6 +181,7 @@ class Instance {
             <menu name="SearchMenu" action="Search">
               <placeholder name="SearchOps_8">
                 <menuitem name="SearchGoToDefinitionMenu" action="SearchGoToDefinition"/>
+                <menuitem name="SearchGoBackMenu" action="SearchGoBack"/>
               </placeholder>
             </menu>
             <placeholder name="ExtraMenu_1">
@@ -188,6 +195,9 @@ class Instance {
 
     public Instance(Gedit.Window window) {
         this.window = window;
+        if (history == null)
+        	history = new ArrayList<Gtk.TextMark>();
+        
         output_buffer = new Gtk.TextBuffer(null);
         
         error_tag = output_buffer.create_tag("error", "foreground", "#c00");
@@ -214,11 +224,21 @@ class Instance {
         action_group = new Gtk.ActionGroup("valencia");
         action_group.add_actions(entries, this);
         go_to_definition_action = action_group.get_action("SearchGoToDefinition");
+        go_back_action = action_group.get_action("SearchGoBack");
         build_action = action_group.get_action("ProjectBuild");
-        update_ui();
         manager.insert_action_group(action_group, 0);
         
         ui_id = manager.add_ui_from_string(ui, -1);
+        
+        Gtk.MenuItem search_menu = (Gtk.MenuItem) manager.get_widget("/MenuBar/SearchMenu");
+        if (search_menu != null)
+            search_menu.activate += on_search_menu_activated;
+        else critical("null search_menu");
+        
+        Gtk.MenuItem project_menu = (Gtk.MenuItem) manager.get_widget("/MenuBar/ExtraMenu_1/ProjectMenu");
+        if (project_menu != null)
+            project_menu.activate += on_project_menu_activated;
+        else critical("null project_menu");
         
         init_error_regex();
         
@@ -233,6 +253,7 @@ class Instance {
 	
 	static void tab_removed_callback(Gedit.Window window, Gedit.Tab tab, Instance instance) {
 		Gedit.Document document = tab.get_document();
+		
 		if (document.get_modified()) {
 			// We're closing a document without saving changes.  Reparse the symbol tree
 			// from the source file on disk.
@@ -246,7 +267,7 @@ class Instance {
     static void all_save_callback(Gedit.Document document, void *arg1, Instance instance) {
 		string path = document_filename(document);
    		Program.update_any(path, buffer_contents(document));
-	}	
+	}
     
     bool scroll_to_end() {
         Gtk.TextIter end;
@@ -365,16 +386,19 @@ class Instance {
             build();
     }
     
+    void scroll_tab_to_iter(Gedit.Tab tab, Gtk.TextIter iter) {
+	    Gedit.View view = tab.get_view();
+	    view.scroll_to_iter(iter, 0.2, false, 0.0, 0.0);
+        view.grab_focus();
+    }
+    
     void go(Gedit.Tab tab, Destination dest) {
 	    Gedit.Document document = tab.get_document();
 	    Gtk.TextIter start;
 	    Gtk.TextIter end;
 	    dest.get_range(document, out start, out end);
         document.select_range(start, end);
-        
-	    Gedit.View view = tab.get_view();
-	    view.scroll_to_iter(start, 0.2, false, 0.0, 0.0);
-        view.grab_focus();
+        scroll_tab_to_iter(tab, start);
     }
     
     void on_document_loaded(Gedit.Document document) {
@@ -395,6 +419,7 @@ class Instance {
 		Gedit.Tab tab = find_tab(filename, out w);
 		if (tab != null) {
 		    w.set_active_tab(tab);
+            w.present();		    
 		    go(tab, dest);
             return;
 		}
@@ -513,7 +538,8 @@ class Instance {
 	    	}
         
         weak string source = buffer_contents(document);
-        int pos = get_insert_iter(document).get_offset();
+        Gtk.TextIter insert = get_insert_iter(document);
+        int pos = insert.get_offset();
         CompoundName name = new Parser().name_at(source, pos);
         if (name == null)
         	return;
@@ -522,16 +548,59 @@ class Instance {
 		Symbol sym = sf.resolve(name, pos);
 		if (sym == null)
 			return;
-		
+
+		Gtk.TextMark mark = document.create_mark(null, insert, false);
+		history.add(mark);
+		if (history.size > MAX_HISTORY)
+		    history.remove_at(0);
+			
 		SourceFile dest = sym.source;
 		jump(dest.filename, new CharRange(sym.start, sym.start + (int) sym.name.length));
 	}
 
-    public void update_ui() {
+	void on_go_back() {
+		if (history.size == 0)
+			return;
+
+		Gtk.TextMark mark = history.get(history.size - 1);
+		history.remove_at(history.size - 1);
+		assert(!mark.get_deleted());
+
+		Gedit.Document buffer = (Gedit.Document) mark.get_buffer();
+		Gtk.TextIter iter;
+		buffer.get_iter_at_mark(out iter, mark);
+		buffer.delete_mark(mark);
+		buffer.place_cursor(iter);
+		
+		Gedit.Tab tab = Gedit.Tab.get_from_document(buffer);
+	    Gedit.Window window = (Gedit.Window) tab.get_toplevel();
+	    window.set_active_tab(tab);
+		window.present();
+	    
+	    scroll_tab_to_iter(tab, iter);
+	}
+
+    bool can_go_back() {
+        if (history.size == 0)
+            return false;
+		Gtk.TextMark mark = history.get(history.size - 1);
+        return !mark.get_deleted();
+    }
+
+    string active_filename() {
         Gedit.Document document = window.get_active_document();
-        string filename = document == null ? null : document_filename(document);
-        build_action.set_sensitive(filename != null);
+        return document == null ? null : document_filename(document);
+    }
+
+    void on_search_menu_activated() {
+        string filename = active_filename();
         go_to_definition_action.set_sensitive(filename != null && Program.is_vala(filename));
+        go_back_action.set_sensitive(can_go_back());
+    }
+    
+    void on_project_menu_activated() {
+        string filename = active_filename();
+        build_action.set_sensitive(filename != null);
     }
 
     public void deactivate() {
@@ -562,11 +631,6 @@ class Plugin : Gedit.Plugin {
         Instance i = find(window);
         i.deactivate();
         instances.remove(i);
-    }
-    
-    public override void update_ui(Gedit.Window window) {
-        Instance i = find(window);
-        i.update_ui();
     }
 }
 
