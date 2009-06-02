@@ -213,6 +213,7 @@ class Instance {
         output_view.button_press_event += on_button_press;
         
         output_pane = new Gtk.ScrolledWindow(null, null);
+        output_pane.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC);
         output_pane.add(output_view);
         output_pane.show_all();
         
