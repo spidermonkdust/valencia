@@ -138,9 +138,9 @@ class CharRange : Destination {
 class Instance : Object {
     public Gedit.Window window;
     Gtk.ActionGroup action_group;
-    Gtk.Action go_to_definition_action;
-    Gtk.Action go_back_action;
-    Gtk.Action build_action;
+    Gtk.MenuItem go_to_definition_menu_item;
+    Gtk.MenuItem go_back_menu_item;
+    Gtk.MenuItem build_menu_item;
     uint ui_id;
     
     string build_directory;
@@ -224,9 +224,6 @@ class Instance : Object {
         
         action_group = new Gtk.ActionGroup("valencia");
         action_group.add_actions(entries, this);
-        go_to_definition_action = action_group.get_action("SearchGoToDefinition");
-        go_back_action = action_group.get_action("SearchGoBack");
-        build_action = action_group.get_action("ProjectBuild");
         manager.insert_action_group(action_group, 0);
         
         ui_id = manager.add_ui_from_string(ui, -1);
@@ -241,6 +238,18 @@ class Instance : Object {
             project_menu.activate += on_project_menu_activated;
         else critical("null project_menu");
         
+        go_to_definition_menu_item = (Gtk.MenuItem) manager.get_widget(
+            "/MenuBar/SearchMenu/SearchOps_8/SearchGoToDefinitionMenu");
+        assert(go_to_definition_menu_item != null);
+        
+        go_back_menu_item = (Gtk.MenuItem) manager.get_widget(
+            "/MenuBar/SearchMenu/SearchOps_8/SearchGoBackMenu");
+        assert(go_back_menu_item != null);
+        
+        build_menu_item = (Gtk.MenuItem) manager.get_widget(
+            "/MenuBar/ExtraMenu_1/ProjectMenu/ProjectBuildMenu");
+        assert(build_menu_item != null);
+
         init_error_regex();
         
         Signal.connect(window, "tab-added", (Callback) tab_added_callback, this);
@@ -595,13 +604,12 @@ class Instance : Object {
 
     void on_search_menu_activated() {
         string filename = active_filename();
-        go_to_definition_action.set_sensitive(filename != null && Program.is_vala(filename));
-        go_back_action.set_sensitive(can_go_back());
+        go_to_definition_menu_item.set_sensitive(filename != null && Program.is_vala(filename));
+        go_back_menu_item.set_sensitive(can_go_back());
     }
     
     void on_project_menu_activated() {
-        string filename = active_filename();
-        build_action.set_sensitive(filename != null);
+        build_menu_item.set_sensitive(active_filename() != null);
     }
 
     public void deactivate() {
