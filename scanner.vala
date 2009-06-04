@@ -45,7 +45,7 @@ const Keyword[] keywords = {
 	{ "weak", Token.WEAK }
 };
 
-class Scanner {
+class Scanner : Object {
 	// The lookahead token.  If not NONE, it extends from characters (token_start_char) to (input),
 	// and from positions (token_start) to (input_pos).
 	Token token = Token.NONE;

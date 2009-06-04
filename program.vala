@@ -1,6 +1,6 @@
 using Gee;
 
-abstract class CompoundName {
+abstract class CompoundName : Object {
 	public abstract string to_string();
 }
 
@@ -172,7 +172,7 @@ class ForEach : Statement, Scope {
 	}
 }
 
-class Chain {
+class Chain : Object {
 	Scope scope;
 	Chain parent;
 	

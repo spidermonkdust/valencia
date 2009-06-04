@@ -1,6 +1,6 @@
 using Gee;
 
-class Parser {
+class Parser : Object {
 	SourceFile source;
 	Scanner scanner;
 	Namespace current_namespace;

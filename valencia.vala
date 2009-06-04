@@ -81,7 +81,7 @@ Gedit.Tab? find_tab(string filename, out Gedit.Window window) {
 	return null;
 }
 
-abstract class Destination {
+abstract class Destination : Object {
 	public abstract void get_range(Gtk.TextBuffer buffer,
 								   out Gtk.TextIter start, out Gtk.TextIter end);
 }
@@ -135,7 +135,7 @@ class CharRange : Destination {
 	}	
 }
 
-class Instance {
+class Instance : Object {
     public Gedit.Window window;
     Gtk.ActionGroup action_group;
     Gtk.Action go_to_definition_action;
