@@ -259,6 +259,7 @@ class Parser : Object {
 			case Token.PRIVATE:
 			case Token.PROTECTED:
 			case Token.PUBLIC:
+			case Token.SIGNAL:
 			case Token.STATIC:
 			case Token.VIRTUAL:
 			case Token.WEAK:
