@@ -448,7 +448,7 @@ class Program : Object {
             top_directory = directory;
         
         // Recursively add source files to the program
-        scan_directory_for_sources(top_directory)
+        scan_directory_for_sources(top_directory);
 		
 		programs.add(this);
 	}

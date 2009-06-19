@@ -753,14 +753,14 @@ class Instance : Object {
             einfo = error_info(iter);
             if (einfo != null) {
                 Gedit.Document document = window.get_active_document();
-                Gtk.TextIter document_iter
+                Gtk.TextIter document_iter;
                 document.get_iter_at_line(out document_iter, einfo.start_line.to_int());
               
                 Gtk.TextMark doc_mark = document.create_mark(null, document_iter, false);
                 Gtk.TextMark build_mark = output_buffer.create_mark(null, iter, false);
                 
                 ErrorPair pair = new ErrorPair(doc_mark, build_mark, einfo);
-                program_errors.error_history.add(pair)
+                program_errors.error_history.add(pair);
             }                
             
             end_of_buffer = !iter.forward_line();
