@@ -1,4 +1,4 @@
-SOURCES = parser.vala program.vala scanner.vala valencia.vala
+SOURCES = parser.vala program.vala scanner.vala valencia.vala util.vala
 
 libvalencia.so: $(SOURCES)
 	pkg-config --exists gedit-2.20

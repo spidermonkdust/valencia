@@ -436,32 +436,84 @@ class SourceFile : Node, Scope {
 }
 
 class Program : Object {
-	string directory;
+	string top_directory;
 	ArrayList<SourceFile> sources = new ArrayList<SourceFile>();
 	
 	static ArrayList<Program> programs;
 	
 	Program(string directory) {
-		this.directory = directory;
-		Dir dir = Dir.open(directory);
+		// Search for the program's makefile
+        File makefile_dir = File.new_for_path(directory);
+        if (!get_makefile_directory(makefile_dir))
+            top_directory = directory;
+        
+        // Recursively add source files to the program
+        scan_directory_for_sources(top_directory)
+		
+		programs.add(this);
+	}
+
+	bool get_makefile_directory(GLib.File makefile_dir) {
+        GLib.File makefile = makefile_dir.get_child("Makefile");
+        if (!makefile.query_exists(null)) {
+            makefile = makefile_dir.get_child("makefile");
+            
+            if (!makefile.query_exists(null)) {
+                makefile = makefile_dir.get_child("GNUmakefile");
+                
+                if (!makefile.query_exists(null)) {
+                    File parent_dir = makefile_dir.get_parent();
+                    if (parent_dir != null) {
+                        return get_makefile_directory(parent_dir);
+                    }
+                    
+                    return false;
+                }
+            }
+        } else {
+            top_directory = makefile_dir.get_path();
+            return true;
+        }
+        
+        // Will never be reached, but I must put a return statement here to shut the compiler up
+        return true;
+	}
+	
+	// Adds vala files in all subdirectories to the program, as well as parses them
+    void scan_directory_for_sources(string directory) {
+        Dir dir;
+        try {
+    		dir = Dir.open(directory);
+        } catch (GLib.FileError e) {
+            // needs a message box? stderr.printf message?
+            return;
+        }
+        
 		Parser parser = new Parser();
 		while (true) {
 			string file = dir.read_name();
 			if (file == null)
 				break;
+     		string path = Path.build_filename(directory, file);
+
 			if (is_vala(file)) {
-				string path = Path.build_filename(directory, file);
 				SourceFile source = new SourceFile(this, path);
 				string contents;
-				FileUtils.get_contents(path, out contents);
+				
+				try {
+    				FileUtils.get_contents(path, out contents);
+    		    } catch (GLib.FileError e) {
+                    // needs a message box? stderr.printf message?
+                    return;
+    		    }
 				parser.parse(source, contents);
 				sources.add(source);
+			} else if (GLib.FileUtils.test(path, GLib.FileTest.IS_DIR)) {
+			    scan_directory_for_sources(path);
 			}
 		}
-		
-		programs.add(this);
-	}
-	
+    }
+    
 	public static bool is_vala(string filename) {
 		return filename.has_suffix(".vala") ||
 		       filename.has_suffix(".vapi") ||
@@ -497,7 +549,7 @@ class Program : Object {
 	}
 	
 	public void update(string path, string contents) {
-		if (is_vala(path) && Path.get_dirname(path) == directory)
+		if (is_vala(path) && dir_has_parent(path, top_directory))
 			update1(path, contents);
 	}
 	
@@ -506,7 +558,7 @@ class Program : Object {
 			programs = new ArrayList<Program>();
 			
 		foreach (Program p in programs)
-			if (p.directory == dir)
+			if (dir_has_parent(dir, p.get_top_directory()))
 				return p;
 		return null;
 	}
@@ -534,6 +586,10 @@ class Program : Object {
 			}
 			p.update1(path, contents);
 		}
+	}
+	
+	public string get_top_directory() {
+	    return top_directory;
 	}
 }
 
