@@ -94,6 +94,7 @@ class Parser : Object {
 	}
 	
 	Parameter? parse_parameter() {
+        skip_attributes();
 		if (accept(Token.OUT) || accept(Token.REF))
             accept(Token.UNOWNED) || accept(Token.WEAK);
 		else accept(Token.OWNED);
