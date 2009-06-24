@@ -97,7 +97,8 @@ class Parser : Object {
 		Token t = peek_token();
 		if (t == Token.OUT || t == Token.REF) {
 			next_token();
-			accept(Token.WEAK);
+            if (!accept(Token.UNOWNED))
+    			accept(Token.WEAK);
 		}
 		CompoundName type = parse_type();
 		if (type == null || !accept(Token.ID))
@@ -261,6 +262,7 @@ class Parser : Object {
 			case Token.PUBLIC:
 			case Token.SIGNAL:
 			case Token.STATIC:
+            case Token.UNOWNED:
 			case Token.VIRTUAL:
 			case Token.WEAK:
 				return true;
