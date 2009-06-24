@@ -94,12 +94,9 @@ class Parser : Object {
 	}
 	
 	Parameter? parse_parameter() {
-		Token t = peek_token();
-		if (t == Token.OUT || t == Token.REF) {
-			next_token();
-            if (!accept(Token.UNOWNED))
-    			accept(Token.WEAK);
-		}
+		if (accept(Token.OUT) || accept(Token.REF))
+            accept(Token.UNOWNED) || accept(Token.WEAK);
+		else accept(Token.OWNED);
 		CompoundName type = parse_type();
 		if (type == null || !accept(Token.ID))
 			return null;

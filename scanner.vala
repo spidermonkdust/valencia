@@ -12,8 +12,8 @@ enum Token {
 	
 	// keywords
 	ABSTRACT, CLASS, CONST, CONSTRUCT, DELEGATE, ENUM, FOREACH, INTERFACE, NAMESPACE, NEW, OUT,
-	OVERRIDE, PRIVATE, PROTECTED, PUBLIC, REF, RETURN, SIGNAL, STATIC, STRUCT, UNOWNED, USING,
-    VIRTUAL, WEAK
+	OVERRIDE, OWNED, PRIVATE, PROTECTED, PUBLIC, REF, RETURN, SIGNAL, STATIC, STRUCT, UNOWNED,
+    USING, VIRTUAL, WEAK
 }
 
 struct Keyword {
@@ -34,6 +34,7 @@ const Keyword[] keywords = {
 	{ "new", Token.NEW },
 	{ "out", Token.OUT },
 	{ "override", Token.OVERRIDE },
+    { "owned", Token.OWNED },
 	{ "private", Token.PRIVATE },
 	{ "protected", Token.PROTECTED },
 	{ "public", Token.PUBLIC },
