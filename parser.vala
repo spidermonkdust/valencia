@@ -207,16 +207,17 @@ class Parser : Object {
 			skip();
 			return null;
 		}
-		if (!accept(Token.SEMICOLON)) {
-			// Look for a left brace.  (There may be a throws clause in between.)
-			Token t;
-			do {
-				t = next_token();
-				if (t == Token.EOF)
-					return null;
-			} while (t != Token.LEFT_BRACE);
-			m.body = parse_block();
-		}
+
+    	// Look for a semicolon or left brace.  (There may be a throws clause in between.)
+		Token t = Token.NONE;
+		do {
+			t = next_token();
+			if (t == Token.EOF)
+				return null;
+		} while (t != Token.LEFT_BRACE && t != Token.SEMICOLON);
+        if (t == Token.LEFT_BRACE)
+        	m.body = parse_block();
+
 		m.end = scanner.end;
 		return m;
 	}
