@@ -1,4 +1,5 @@
 using Gee;
+using Vte;
 
 void make_pipe(int fd, IOFunc func) throws IOChannelError {
     IOChannel pipe = new IOChannel.unix_new(fd);
@@ -175,13 +176,17 @@ class Instance : Object {
     Gtk.ActionGroup action_group;
     Gtk.MenuItem go_to_definition_menu_item;
     Gtk.MenuItem go_back_menu_item;
-    Gtk.MenuItem build_menu_item;
     Gtk.MenuItem next_error_menu_item;
     Gtk.MenuItem prev_error_menu_item;
+    Gtk.MenuItem build_menu_item;
+    Gtk.MenuItem run_menu_item;
+
     uint ui_id;
     
     int saving;
+    bool child_process_running;
     
+    // Output pane
     Gtk.TextTag error_tag;
     Gtk.TextTag italic_tag;
     Gtk.TextTag bold_tag;
@@ -190,6 +195,10 @@ class Instance : Object {
     Gtk.TextBuffer output_buffer;
     Gtk.TextView output_view;
     Gtk.ScrolledWindow output_pane;
+    
+    // Run command
+    Gtk.ScrolledWindow run_pane;
+    Vte.Terminal run_terminal;
     
     Regex error_regex;
     
@@ -214,7 +223,9 @@ class Instance : Object {
 	    { "Project", null, "_Project" },   // top-level menu
 
 	    { "ProjectBuild", Gtk.STOCK_CONVERT, "_Build", "<shift><ctrl>b",
-	      "Build the project", on_build }
+	      "Build the project", on_build },
+	    { "ProjectRun", Gtk.STOCK_EXECUTE, "_Run", "<ctrl><alt>r",
+	      "Build the project", on_run }
     };
 
     const string ui = """
@@ -232,6 +243,7 @@ class Instance : Object {
             <placeholder name="ExtraMenu_1">
               <menu name="ProjectMenu" action="Project">
                 <menuitem name="ProjectBuildMenu" action="ProjectBuild"/>
+                <menuitem name="ProjectRunMenu" action="ProjectRun"/>
               </menu>
             </placeholder>
           </menubar>
@@ -248,6 +260,8 @@ class Instance : Object {
         if (program_error_list == null) {
             program_error_list = new ArrayList<ProgramErrorList>();
         }
+        
+        // Output pane
         
         output_buffer = new Gtk.TextBuffer(null);
         
@@ -270,6 +284,20 @@ class Instance : Object {
         
         Gedit.Panel panel = window.get_bottom_panel();
         panel.add_item_with_stock_icon(output_pane, "Build", Gtk.STOCK_CONVERT);
+        
+        // Run pane
+        run_terminal = new Vte.Terminal();
+        run_terminal.child_exited += on_run_child_exit;
+        child_process_running = false;
+        
+        run_pane = new Gtk.ScrolledWindow(null, null);
+        run_pane.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC);
+        run_pane.add(run_terminal);
+        run_pane.show_all();
+        
+        panel.add_item_with_stock_icon(run_pane, "Run", Gtk.STOCK_EXECUTE);     
+        
+        // Toolbar menu
 
         Gtk.UIManager manager = window.get_ui_manager();
         
@@ -308,6 +336,10 @@ class Instance : Object {
         build_menu_item = (Gtk.MenuItem) manager.get_widget(
             "/MenuBar/ExtraMenu_1/ProjectMenu/ProjectBuildMenu");
         assert(build_menu_item != null);
+        
+        run_menu_item = (Gtk.MenuItem) manager.get_widget(
+            "/MenuBar/ExtraMenu_1/ProjectMenu/ProjectRunMenu");
+        assert(run_menu_item != null);
 
         init_error_regex();
         
@@ -805,10 +837,13 @@ class Instance : Object {
         return new_program_errors;
     }
     
+    Program get_active_document_program() {
+        string filename = active_filename();
+        return Program.find_containing(filename);
+    }
+    
     ProgramErrorList? get_document_error_history() {
-        Gedit.Document document = window.get_active_document();
-        string filename = document_filename(document);
-        Program document_program = Program.find_containing(filename);
+        Program document_program = get_active_document_program();
         
         foreach (ProgramErrorList p in program_error_list) {
             if (p.program == document_program)
@@ -855,24 +890,98 @@ class Instance : Object {
         
         move_to_error(program_errors);
     }
-    
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                        Run Command                                             //
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    void on_run() {
+        if (active_filename() == null || child_process_running)
+            return;
+            
+        Program program = get_active_document_program();
+        program.reparse_makefile();
+        string binary_path = program.get_binary_run_path();
+        
+        if (binary_path == null || !program.get_binary_is_executable())
+            return;
+
+        if (!GLib.FileUtils.test(binary_path, GLib.FileTest.EXISTS)) {
+            show_error_dialog("\"" + binary_path + "\" was not found. Try rebuilding. ");
+            return;
+        }
+        
+        if (!GLib.FileUtils.test(binary_path, GLib.FileTest.IS_EXECUTABLE)) {
+            show_error_dialog("\"" + binary_path + "\" is not an executable file! ");
+            return;
+        }
+
+        string[] args = { binary_path };
+        
+        int pid = run_terminal.fork_command(binary_path, args, null, Path.get_dirname(binary_path),
+                                            false, false, false);
+
+        if (pid == -1) {
+            show_error_dialog("There was a problem running \"" + binary_path + "\"");
+            return;
+        }
+        
+        // Show the run pane always
+        run_terminal.reset(true, true);
+        run_pane.show();
+        Gedit.Panel panel = window.get_bottom_panel();
+        panel.activate_item(run_pane);
+        panel.show();
+        
+        child_process_running = true;
+    }
+
+    void on_run_child_exit() {
+        run_terminal.feed("The program exited.\r\n", -1);
+        child_process_running = false;
+    }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+//                              Menu activation and plugin class                                  //
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
     bool errors_exist() {
         ProgramErrorList program_errors = get_document_error_history();
         return program_errors.error_history.size != 0;
+    }
+    
+    bool program_exists_for_active_document() {
+        string filename = active_filename();
+        return Program.null_find_containing(filename) != null;
     }
 
     void on_search_menu_activated() {
         bool definition_item_sensitive = active_document_is_valid_vala_file();
         go_to_definition_menu_item.set_sensitive(definition_item_sensitive);
         go_back_menu_item.set_sensitive(can_go_back());
-        
-        bool activate_error_search = active_filename() != null && errors_exist();
+
+        // Make sure the program for the file exists first, otherwise disable the run button
+        bool activate_error_search = program_exists_for_active_document() &&
+                                     active_filename() != null && errors_exist();
+            
         next_error_menu_item.set_sensitive(activate_error_search);
         prev_error_menu_item.set_sensitive(activate_error_search);
     }
     
     void on_project_menu_activated() {
-        build_menu_item.set_sensitive(active_filename() != null);
+        bool active_file_not_null = active_filename() != null;
+        build_menu_item.set_sensitive(active_file_not_null);
+        
+        if (active_file_not_null && program_exists_for_active_document()) {
+            Program program = get_active_document_program();
+            program.reparse_makefile();
+            string binary_path = program.get_binary_run_path();
+            
+            run_menu_item.set_sensitive(!child_process_running && binary_path != null &&
+                                        program.get_binary_is_executable());
+        } else {
+            run_menu_item.set_sensitive(false);
+        }
     }
 
     public void deactivate() {

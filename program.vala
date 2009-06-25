@@ -34,7 +34,7 @@ abstract class Node : Object {
 		this.start = start;
 		this.end = end;
 	}
-	
+
 	// Return all children which may possibly contain a scope.
 	public virtual ArrayList<Node>? children() { return null; }
 	
@@ -435,57 +435,187 @@ class SourceFile : Node, Scope {
 	}	
 }
 
+class Makefile : Object {
+    public string path;
+    public string relative_binary_run_path;
+    
+    bool regex_parse(GLib.DataInputStream datastream) {
+        Regex program_regex, rule_regex, root_regex;
+        try {            
+            root_regex = new Regex("""^ *BUILD_ROOT *= *1$""");
+            program_regex = new Regex("""^ *PROGRAM *= *(.+) *$""");
+            rule_regex = new Regex("""^ *([^: ]+) *:""");
+        } catch (RegexError e) {
+            GLib.warning("A RegexError occured when creating a new regular expression.\n");
+        	return false;		// TODO: report error
+        }
+
+        bool rule_matched = false;
+        bool program_matched = false;
+        bool root_matched = false;
+        MatchInfo info;
+
+        // this line is necessary because of a vala compiler bug that thinks info is uninitialized
+        // within the block: if (!program_matched && program_regex.match(line, 0, out info)) {
+        program_regex.match(" ", 0, out info);
+            
+        while (true) {
+            size_t length;
+            string line;
+           
+            try {
+                line = datastream.read_line(out length, null);
+            } catch (GLib.Error err) {
+                GLib.warning("An unexpected error occurred while parsing the Makefile.\n");
+                return false;
+            }
+            
+            // The end of the document was reached, ending...
+            if (line == null)
+                break;
+            
+            if (!program_matched && program_regex.match(line, 0, out info)) {
+                // The 'PROGRAM = xyz' regex can be matched anywhere in the makefile, where the rule
+                // regex can only be matched the first time.
+                relative_binary_run_path = info.fetch(1);
+                program_matched = true;
+            } else if (!rule_matched && !program_matched && rule_regex.match(line, 0, out info)) {
+                rule_matched = true;
+                relative_binary_run_path = info.fetch(1);
+            } else if (!root_matched && root_regex.match(line, 0, out info)) {
+                root_matched = true;
+            }
+
+            if (program_matched && root_matched)
+                break;
+        }
+        
+        return root_matched;
+    }
+    
+    // Return: true if current directory will be root, false if not
+    public bool parse(GLib.File makefile) {
+        GLib.FileInputStream stream;
+        try {
+            stream = makefile.read(null);
+         } catch (GLib.Error err) {
+            GLib.warning("Unable to open %s for parsing.\n", path);
+            return false;
+         }
+        GLib.DataInputStream datastream = new GLib.DataInputStream(stream);
+        
+        return regex_parse(datastream);
+    }
+
+	public void reparse() {
+	    if (path == null)
+	        return;
+	        
+	    GLib.File makefile = GLib.File.new_for_path(path);
+	    parse(makefile);
+	}
+	
+	public void reset_paths() {
+        path = null;
+        relative_binary_run_path = null;
+	}
+	
+}
+
 class Program : Object {
 	string top_directory;
-	ArrayList<SourceFile> sources = new ArrayList<SourceFile>();
+    ArrayList<SourceFile> sources = new ArrayList<SourceFile>();
 	
 	static ArrayList<Program> programs;
 	
+	Makefile makefile;
+
+	bool recursive_project;
+
 	Program(string directory) {
-		// Search for the program's makefile
+	    top_directory = null;
+        makefile = new Makefile();
+    	
+		// Search for the program's makefile; if the top_directory still hasn't been modified
+		// (meaning no makefile at all has been found), then just set it to the default directory
         File makefile_dir = File.new_for_path(directory);
-        if (!get_makefile_directory(makefile_dir))
+        if (get_makefile_directory(makefile_dir)) {
+            // Recursively add source files to the program
+            scan_directory_for_sources(top_directory, true);
+            recursive_project = true;
+        } else {
+            // If no root directory was found, make sure there is a local top directory, and 
+            // scan only that directory for sources
             top_directory = directory;
-        
-        // Recursively add source files to the program
-        scan_directory_for_sources(top_directory);
+            scan_directory_for_sources(top_directory, false);
+            recursive_project = false;
+        }
 		
 		programs.add(this);
 	}
 
+    // Returns true if a BUILD_ROOT or configure.ac was found: files should be found recursively
+    // False if only the local directory will be used
 	bool get_makefile_directory(GLib.File makefile_dir) {
-        GLib.File makefile = makefile_dir.get_child("Makefile");
-        if (!makefile.query_exists(null)) {
-            makefile = makefile_dir.get_child("makefile");
+	    if (configure_exists_in_directory(makefile_dir))
+	        return true;
+	
+        GLib.File makefile_file = makefile_dir.get_child("Makefile");
+        if (!makefile_file.query_exists(null)) {
+            makefile_file = makefile_dir.get_child("makefile");
             
-            if (!makefile.query_exists(null)) {
-                makefile = makefile_dir.get_child("GNUmakefile");
+            if (!makefile_file.query_exists(null)) {
+                makefile_file = makefile_dir.get_child("GNUmakefile");
                 
-                if (!makefile.query_exists(null)) {
-                    File parent_dir = makefile_dir.get_parent();
-                    if (parent_dir != null) {
-                        return get_makefile_directory(parent_dir);
-                    }
-                    
-                    return false;
+                if (!makefile_file.query_exists(null)) {
+                    return goto_parent_directory(makefile_dir);
                 }
             }
-        } else {
-            top_directory = makefile_dir.get_path();
+        }
+
+        // Set the top_directory to be the first BUILD_ROOT we come across
+        if (makefile.parse(makefile_file)) {
+            set_paths(makefile_file);
             return true;
         }
         
-        // Will never be reached, but I must put a return statement here to shut the compiler up
-        return true;
+        return goto_parent_directory(makefile_dir);
 	}
 	
-	// Adds vala files in all subdirectories to the program, as well as parses them
-    void scan_directory_for_sources(string directory) {
+	bool goto_parent_directory(GLib.File base_directory) {
+        GLib.File parent_dir = base_directory.get_parent();
+        return parent_dir != null && get_makefile_directory(parent_dir);
+	}
+	
+	bool configure_exists_in_directory(GLib.File configure_dir) {
+        GLib.File configure = configure_dir.get_child("configure.ac");
+        
+        if (!configure.query_exists(null)) {
+            configure = configure_dir.get_child("configure.in");
+    
+            if (!configure.query_exists(null))
+                return false;
+        }
+
+        // If there's a configure file, don't bother parsing for a makefile        
+        top_directory = configure_dir.get_path();
+        makefile.reset_paths();
+
+        return true;
+	}
+
+    void set_paths(GLib.File makefile_file) {
+        makefile.path = makefile_file.get_path();
+        top_directory = Path.get_dirname(makefile.path);
+    }
+	
+	// Adds vala files in the directory to the program, as well as parses them
+    void scan_directory_for_sources(string directory, bool recursive) {
         Dir dir;
         try {
     		dir = Dir.open(directory);
         } catch (GLib.FileError e) {
-            // needs a message box? stderr.printf message?
+            GLib.warning("Error opening directory: %s\n", directory);
             return;
         }
         
@@ -508,13 +638,13 @@ class Program : Object {
     		    }
 				parser.parse(source, contents);
 				sources.add(source);
-			} else if (GLib.FileUtils.test(path, GLib.FileTest.IS_DIR)) {
-			    scan_directory_for_sources(path);
-			}
+            } else if (recursive && GLib.FileUtils.test(path, GLib.FileTest.IS_DIR)) {
+                scan_directory_for_sources(path, true);
+            }
 		}
     }
-    
-	public static bool is_vala(string filename) {
+	
+    public static bool is_vala(string filename) {
 		return filename.has_suffix(".vala") ||
 		       filename.has_suffix(".vapi") ||
 		       filename.has_suffix(".cs");	// C#
@@ -549,8 +679,17 @@ class Program : Object {
 	}
 	
 	public void update(string path, string contents) {
-		if (is_vala(path) && dir_has_parent(path, top_directory))
-			update1(path, contents);
+        if (!is_vala(path))
+            return;
+            
+        if (recursive_project && dir_has_parent(path, top_directory)) {
+            update1(path, contents);
+            return;
+	    }
+		
+		string path_dir = Path.get_dirname(path);	
+		if (top_directory == path_dir)
+		    update1(path, contents);
 	}
 	
 	static Program? find_program(string dir) {
@@ -558,8 +697,10 @@ class Program : Object {
 			programs = new ArrayList<Program>();
 			
 		foreach (Program p in programs)
-			if (dir_has_parent(dir, p.get_top_directory()))
+			if (p.recursive_project && dir_has_parent(dir, p.get_top_directory()))
 				return p;
+	        else if (p.top_directory == dir)
+	            return p;
 		return null;
 	}
 	
@@ -567,6 +708,13 @@ class Program : Object {
 		string dir = Path.get_dirname(path);
 		Program p = find_program(dir);
 		return p != null ? p : new Program(dir);
+	}
+	
+	public static Program? null_find_containing(string? path) {
+	    if (path == null)
+	        return null;
+	    string dir = Path.get_dirname(path);
+		return find_program(dir);	
 	}
 
 	// Update the text of a (possibly new) source file in any existing program.
@@ -591,5 +739,21 @@ class Program : Object {
 	public string get_top_directory() {
 	    return top_directory;
 	}
+
+	public string? get_binary_run_path() {
+        if (makefile.relative_binary_run_path == null)
+            return null;
+        return Path.build_filename(top_directory, makefile.relative_binary_run_path);
+	}
+	
+	public bool get_binary_is_executable() {
+	    string? binary_path = get_binary_run_path();
+	    return binary_path != null && !binary_path.has_suffix(".so");
+	}
+	
+	public void reparse_makefile() {
+	    makefile.reparse();
+	}
+	
 }
 

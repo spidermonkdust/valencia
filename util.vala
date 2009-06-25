@@ -10,4 +10,12 @@ bool dir_has_parent(string dir, string parent) {
     return true;
 }
 
+public void show_error_dialog(string message) {
+    Gtk.MessageDialog err_dialog = new Gtk.MessageDialog(null, Gtk.DialogFlags.MODAL, 
+                                                Gtk.MessageType.ERROR, Gtk.ButtonsType.OK, 
+                                                message, null);
+    err_dialog.set_title("Error");
+    err_dialog.run(); 
+    err_dialog.destroy(); 
+}
 
