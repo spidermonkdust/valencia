@@ -443,6 +443,8 @@ class Instance : Object {
 
     void build() {
         string filename = get_active_document_filename();
+        
+        Program.rescan_build_root(filename);
 
         // Record the last program to build in this window so that we don't accidentally hide
         // output that isn't part of a program that gets built later
@@ -899,6 +901,9 @@ class Instance : Object {
         if (active_filename() == null || child_process_running)
             return;
             
+        string filename = get_active_document_filename();
+        Program.rescan_build_root(filename);
+        
         Program program = get_active_document_program();
         program.reparse_makefile();
         string binary_path = program.get_binary_run_path();

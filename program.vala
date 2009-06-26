@@ -722,19 +722,62 @@ class Program : Object {
 	public static void update_any(string path, string? contents) {
 		if (!is_vala(path))
 			return;
+  		
+  		// If no program exists for this file, don't even bother looking
 		string dir = Path.get_dirname(path);
-		Program p = find_program(dir);
-		if (p != null) {
-			string contents1;		// owning variable
-			if (contents == null) {
-				try {
-					FileUtils.get_contents(path, out contents1);
-				} catch (FileError e) { return; }
-				contents = contents1;
+  		if (find_program(dir) == null)
+  		    return;
+  		
+		string contents1;		// owning variable
+		if (contents == null) {
+			try {
+				FileUtils.get_contents(path, out contents1);
+			} catch (FileError e) { 
+			    GLib.warning("Unable to open %s for updating\n", path);
+			    return; 
 			}
-			p.update1(path, contents);
+			contents = contents1;
+		}
+
+		// Make sure to update the file for each sourcefile
+		foreach (Program program in programs) {
+		    SourceFile sf = program.find_source(path);
+		        if (sf != null)
+		            program.update1(path, contents);
 		}
 	}
+	
+	public static void rescan_build_root(string sourcefile_path) {
+	    Program? program = find_program(Path.get_dirname(sourcefile_path));
+	    
+	    if (program == null)
+	        return;
+	    
+	    string old_top_directory = program.top_directory;
+
+		// get_makefile_directory will set top_directory to the path of the makefile it found - 
+		// if the path is the same as the old top_directory, then no changes have been made
+        File current_dir = File.new_for_path(Path.get_dirname(sourcefile_path));
+
+        if (program.get_makefile_directory(current_dir) && 
+            old_top_directory == program.top_directory)
+            return;
+            
+        program.top_directory = current_dir.get_path();
+
+        // The build root has changed, so: 
+        // 1) delete the old root
+        assert(programs.size > 0);
+        programs.remove(program);
+        
+         // 2) delete root in new build root if there
+        Program? old_prog_at_new_root = find_program(program.top_directory);
+        if (old_prog_at_new_root != null)
+            programs.remove(old_prog_at_new_root);
+            
+         // 3) create a new program at new build root
+        new Program(program.top_directory);
+	}	
 	
 	public string get_top_directory() {
 	    return top_directory;
