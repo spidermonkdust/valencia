@@ -680,6 +680,7 @@ class Instance : Object {
         if (filename == null)
         	return;
         Program program = Program.find_containing(filename);
+        program.parse_system_vapi_files();
 
 		// Reparse any modified documents in this program.
 	    foreach (Gedit.Document d in Gedit.App.get_default().get_documents())

@@ -1,3 +1,5 @@
+
+using Vala;
 using Gee;
 
 abstract class CompoundName : Object {
@@ -37,7 +39,7 @@ abstract class Node : Object {
 
 	// Return all children which may possibly contain a scope.
 	public virtual ArrayList<Node>? children() { return null; }
-	
+
 	protected static ArrayList<Node>? single_node(Node? n) {
 		if (n == null)
 			return null;
@@ -45,13 +47,13 @@ abstract class Node : Object {
 		a.add(n);
 		return a;
 	}
-	
+
 	public Chain? find(Chain? parent, int pos) {
 		Chain c = parent;
 		Scope s = this as Scope;
 		if (s != null)
 			c = new Chain(s, parent);	// link this scope in
-			
+
 		ArrayList<Node> nodes = children();
 		if (nodes != null)
 			foreach (Node n in nodes)
@@ -59,7 +61,7 @@ abstract class Node : Object {
 					return n.find(c, pos);
 		return c;
 	}
-	
+
 	public static Symbol? lookup_in_array(ArrayList<Node> a, string name) {
 		foreach (Node n in a) {
 			Symbol s = n as Symbol;
@@ -68,7 +70,7 @@ abstract class Node : Object {
 		}
 		return null;
 	}
-	
+
 	public abstract void print(int level);
 
 	protected void do_print(int level, string s) {
@@ -524,7 +526,9 @@ class Makefile : Object {
 
 class Program : Object {
 	string top_directory;
-    ArrayList<SourceFile> sources = new ArrayList<SourceFile>();
+	
+	ArrayList<SourceFile> sources = new ArrayList<SourceFile>();
+	static ArrayList<SourceFile> system_sources = new ArrayList<SourceFile>();
 	
 	static ArrayList<Program> programs;
 	
@@ -540,22 +544,21 @@ class Program : Object {
 		// (meaning no makefile at all has been found), then just set it to the default directory
         File makefile_dir = File.new_for_path(directory);
         if (get_makefile_directory(makefile_dir)) {
-            // Recursively add source files to the program
-            scan_directory_for_sources(top_directory, true);
             recursive_project = true;
         } else {
             // If no root directory was found, make sure there is a local top directory, and 
             // scan only that directory for sources
             top_directory = directory;
-            scan_directory_for_sources(top_directory, false);
             recursive_project = false;
         }
+        
+        scan_directory_for_sources(top_directory, sources, recursive_project);
 		
 		programs.add(this);
 	}
 
     // Returns true if a BUILD_ROOT or configure.ac was found: files should be found recursively
-    // False if only the local directory will be used
+    // Returns false if only the local directory will be used
 	bool get_makefile_directory(GLib.File makefile_dir) {
 	    if (configure_exists_in_directory(makefile_dir))
 	        return true;
@@ -610,7 +613,8 @@ class Program : Object {
     }
 	
 	// Adds vala files in the directory to the program, as well as parses them
-    void scan_directory_for_sources(string directory, bool recursive) {
+    void scan_directory_for_sources(string directory, ArrayList<SourceFile> source_list, 
+                                    bool recursive) {
         Dir dir;
         try {
     		dir = Dir.open(directory);
@@ -637,9 +641,9 @@ class Program : Object {
                     return;
     		    }
 				parser.parse(source, contents);
-				sources.add(source);
+				source_list.add(source);
             } else if (recursive && GLib.FileUtils.test(path, GLib.FileTest.IS_DIR)) {
-                scan_directory_for_sources(path, true);
+                scan_directory_for_sources(path, source_list, true);
             }
 		}
     }
@@ -650,14 +654,30 @@ class Program : Object {
 		       filename.has_suffix(".cs");	// C#
 	}
 	
+	Symbol? get_symbol_in_sourcefile(SourceFile source, string? namespace_name, string name) {
+		foreach (Namespace n in source.namespaces) {
+			if (n.full_name == namespace_name) {
+				Symbol s = n.lookup1(name);
+				if (s != null)
+					return s;
+			}
+		}
+		return null;
+	}
+
 	public Symbol? lookup_in_namespace(string? namespace_name, string name) {
-		foreach (SourceFile source in sources)
-			foreach (Namespace n in source.namespaces)
-				if (n.full_name == namespace_name) {
-					Symbol s = n.lookup1(name);
-					if (s != null)
-						return s;
-				}
+		foreach (SourceFile source in sources) {
+			Symbol sym = get_symbol_in_sourcefile(source, namespace_name, name);
+			if (sym != null)
+			    return sym;
+		}
+
+		// After looking in local source files, we turn to the system vapi files
+		foreach (SourceFile source in system_sources) {
+			Symbol sym = get_symbol_in_sourcefile(source, namespace_name, name);
+			if (sym != null)
+			    return sym;
+		}
 		return null;
 	}
 
@@ -797,6 +817,24 @@ class Program : Object {
 	public void reparse_makefile() {
 	    makefile.reparse();
 	}
+	
+    public void parse_system_vapi_files() {
+        // Don't parse system vapi files twice
+        if (system_sources.size > 0)
+            return;
+            
+        string[] null_dirs = {};
+        
+        // Sort of a hack to get the path to the system vapi file directory. Gedit may hang or 
+        // crash if the vala compiler .so is not present...
+        Vala.CodeContext context = new Vala.CodeContext();
+        string path = context.get_package_path("gobject-2.0", null_dirs);
+        string directory = Path.get_dirname(path);
+    
+        // If the user is operating from the system vapi directory, don't reparse all the files    
+        if (directory != top_directory)
+            scan_directory_for_sources(directory, system_sources, true);
+    }
 	
 }
 
