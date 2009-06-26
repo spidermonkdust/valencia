@@ -256,6 +256,7 @@ class Parser : Object {
 			case Token.CONST:
 			case Token.DELEGATE:
             case Token.INLINE:
+            case Token.NEW:
 			case Token.OVERRIDE:
 			case Token.PRIVATE:
 			case Token.PROTECTED:
