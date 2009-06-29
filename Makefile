@@ -16,6 +16,7 @@ libvalencia.so: $(SOURCES)
 	valac -X --shared -X -fPIC --vapidir=. $(LIBS) $^ -o $@
 
 install:
+	@ [ `whoami` != "root" ] || ( echo 'Run make install as yourself, not as root.' ; exit 1 )
 	mkdir -p ~/.gnome2/gedit/plugins
 	cp libvalencia.so valencia.gedit-plugin ~/.gnome2/gedit/plugins
 
