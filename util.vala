@@ -1,3 +1,9 @@
+/* Copyright 2009 Yorba Foundation
+ *
+ * This software is licensed under the GNU LGPL (version 2.1 or later).
+ * See the COPYING file in this distribution. 
+ */
+
 bool dir_has_parent(string dir, string parent) {
     GLib.File new_path = GLib.File.new_for_path(dir);
     while (parent != new_path.get_path()) {

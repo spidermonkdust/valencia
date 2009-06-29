@@ -1,0 +1,45 @@
+Valencia
+--------
+
+* Introduction
+
+Valencia is a gedit plugin that turns gedit into a lightweight IDE for Vala.
+Using Valencia, you can easily browse between symbols in a Vala program.  You
+can build a Vala program inside gedit and can easily jump to lines with
+build errors.
+
+* Installation & Licensing
+
+Please consult the INSTALL and COPYING files for more information.
+    
+* Quick Start
+
+Build Valencia and enable it in gedit as described in the INSTALL file.  If all
+Vala source files in your project are contained in a single directory and that
+directory has a Makefile, Valencia will work with no extra configuration.  If
+your project has multiple directory levels, you'll need to ensure that the
+top directory contains either a file named configure.ac, a file named configure.in
+or a Makefile containing the line BUILD_ROOT = 1; this is how Valencia identifies
+the project root.
+
+To use Valencia, place the cursor on any symbol in a Vala file and press F12
+to jump to its definition.  Press Alt+Left to return to where the cursor was
+before you pressed F12.  To build your project, choose Project->Build or type
+Shift+Ctrl+B.  To jump to a line with a build error, simply double-click
+the error in the build output.
+
+For more information, see the Valencia documentation at http://trac.yorba.org/wiki/Valencia.
+
+* Contacting Yorba
+    
+Yorba:                      http://www.yorba.org
+Valencia project page:      http://www.yorba.org/valencia
+Valencia documentation:     http://trac.yorba.org/wiki/Valencia
+    
+We also encourage you to join the Valencia mailing list.  Send an email
+with a subject: line of "subscribe" (no quotes) to
+valencia-request@lists.yorba.org.
+    
+    
+Copyright 2009 Yorba Foundation
+

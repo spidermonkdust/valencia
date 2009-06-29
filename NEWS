@@ -1,0 +1,11 @@
+Valencia 0.1.0 - June 29, 2009
+------------------------------
+
+Initial release.  Features include:
+
+ * Jumping to symbol definitions
+ * Building a Vala program in gedit
+ * Jumping to build errors
+ * Running a Vala program in gedit
+
+
