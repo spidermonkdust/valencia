@@ -162,14 +162,12 @@ class ErrorPair : Object {
     }
 }
 
-class ProgramErrorList : Object {
-    public weak Program program;
-    public Gee.ArrayList<ErrorPair> error_history;
+class ErrorList : Object {
+    public Gee.ArrayList<ErrorPair> errors;
     public int error_index;
     
-    ProgramErrorList(Program program) {
-        this.program = program;
-        error_history = new Gee.ArrayList<ErrorPair>();
+    ErrorList() {
+        errors = new Gee.ArrayList<ErrorPair>();
         error_index = -1;    
     }
 }
@@ -213,8 +211,6 @@ class Instance : Object {
 
     static ArrayList<Gtk.TextMark> history;
     const int MAX_HISTORY = 10;
-    
-    static Gee.ArrayList<ProgramErrorList> program_error_list;
     
     const Gtk.ActionEntry[] entries = {
         { "SearchGoToDefinition", null, "Go to _Definition", "F12",
@@ -263,10 +259,6 @@ class Instance : Object {
         if (history == null)
         	history = new ArrayList<Gtk.TextMark>();
 
-        if (program_error_list == null) {
-            program_error_list = new ArrayList<ProgramErrorList>();
-        }
-        
         // Output pane
         
         output_buffer = new Gtk.TextBuffer(null);
@@ -402,8 +394,7 @@ class Instance : Object {
                     appended = true;
                     
                     // Always regenerate the list *after* a new build
-                    ProgramErrorList program_errors = get_document_error_history();
-                    generate_error_history(program_errors);
+                    generate_error_history(last_program_to_build);
                 }
                 ret = false;
                 break;
@@ -449,6 +440,9 @@ class Instance : Object {
 
     void build() {
         string filename = get_active_document_filename();
+        
+        if (filename == null)
+            return;
         
         Program.rescan_build_root(filename);
 
@@ -626,9 +620,8 @@ class Instance : Object {
         buffer.apply_tag(tag, start, end);
     }
 
-    void jump_to_document_error(Gtk.TextIter iter, ErrorInfo info, Program current_program) {
-        string filename = Path.build_filename(current_program.get_top_directory(), 
-                                              info.filename);
+    void jump_to_document_error(Gtk.TextIter iter, ErrorInfo info, string cur_top_directory) {
+        string filename = Path.build_filename(cur_top_directory, info.filename);
         int line_number = info.start_line.to_int();
         Destination dest;
         if (info.start_char == null)
@@ -640,9 +633,9 @@ class Instance : Object {
         jump(filename, dest);
     }
     
-    void update_error_history_index(ProgramErrorList program_errors, ErrorInfo info) {
+    void update_error_history_index(ErrorList program_errors, ErrorInfo info) {
         program_errors.error_index = -1;
-        foreach (ErrorPair pair in program_errors.error_history) {
+        foreach (ErrorPair pair in program_errors.errors) {
             ++program_errors.error_index;
             
             if (info.start_line == pair.error_info.start_line)
@@ -673,9 +666,8 @@ class Instance : Object {
         
         // It is last_program_to_build because the output window being clicked on is obviously
         // from this same instance, which means the last program output to this instance's buffer
-        jump_to_document_error(iter, info, last_program_to_build);
-        ProgramErrorList program_errors = get_program_error_list_from_program(last_program_to_build);
-        update_error_history_index(program_errors, info);
+        jump_to_document_error(iter, info, last_program_to_build.get_top_directory());
+        update_error_history_index(last_program_to_build.error_list, info);
 
         return true;
     }
@@ -760,12 +752,12 @@ class Instance : Object {
         return document == null ? null : document_filename(document);
     }
     
-    void clear_error_history(Gee.ArrayList<ErrorPair> error_history) {
-        if (error_history.size == 0)
+    void clear_error_list(Gee.ArrayList<ErrorPair> error_list) {
+        if (error_list == null || error_list.size == 0)
             return;
 
         // Before clearing the ArrayList, clean up the TextMarks stored in the buffers
-        foreach (ErrorPair pair in error_history) {
+        foreach (ErrorPair pair in error_list) {
             Gtk.TextMark mark = pair.document_pane_error;
             Gtk.TextBuffer buffer = mark.get_buffer();
             buffer.delete_mark(mark);
@@ -775,17 +767,19 @@ class Instance : Object {
             buffer.delete_mark(mark);    
         }
        
-        error_history.clear();
+        error_list.clear();
     }
 
-    void generate_error_history(ProgramErrorList program_errors) {
-        clear_error_history(program_errors.error_history);
+    void generate_error_history(Program program) {
+        if (program.error_list == null)
+            program.error_list = new ErrorList();
+        clear_error_list(program.error_list.errors);
 
         // Starting at the first line, search for errors downward
         Gtk.TextIter iter = get_insert_iter(output_buffer);
         iter.set_line(0);
         ErrorInfo einfo;
-        program_errors.error_index = -1;
+        program.error_list.error_index = -1;
         bool end_of_buffer = false;
         
         while (!end_of_buffer) {
@@ -800,17 +794,17 @@ class Instance : Object {
                 Gtk.TextMark build_mark = output_buffer.create_mark(null, iter, false);
                 
                 ErrorPair pair = new ErrorPair(doc_mark, build_mark, einfo);
-                program_errors.error_history.add(pair);
+                program.error_list.errors.add(pair);
             }                
             
             end_of_buffer = !iter.forward_line();
         }
     }
 
-    Instance? find_build_instance(Program cur_program) {
+    Instance? find_build_instance(string cur_top_directory) {
         foreach (Instance inst in plugin.instances) {
             if (inst.last_program_to_build != null && 
-                inst.last_program_to_build.get_top_directory() == cur_program.get_top_directory()) {
+                inst.last_program_to_build.get_top_directory() == cur_top_directory) {
                     return inst;
                 }
         }
@@ -818,52 +812,26 @@ class Instance : Object {
         return null;
     }
 
-    void move_to_error(ProgramErrorList program_errors) {
-        ErrorPair pair = program_errors.error_history[program_errors.error_index];
+    void move_to_error(Program program) {
+        ErrorPair pair = program.error_list.errors[program.error_list.error_index];
 
         Gtk.TextBuffer document = pair.document_pane_error.get_buffer();
         Gtk.TextIter doc_iter;
         document.get_iter_at_mark(out doc_iter, pair.document_pane_error);
         
-        Instance target = find_build_instance(program_errors.program);
+        Instance target = find_build_instance(program.get_top_directory());
         if (target == null)
             return;
-            
-        jump_to_document_error(doc_iter, pair.error_info, program_errors.program);
-        target.move_output_mark_into_focus(pair.build_pane_error);
-    }
 
-    ProgramErrorList get_program_error_list_from_program(Program program) {
-        foreach (ProgramErrorList program_errors in program_error_list) {
-            if (program_errors.program.get_top_directory() == program.get_top_directory())
-                return program_errors;
-        }
-        
-        // Since no ProgramErrorList exists for this file yet, create one
-        ProgramErrorList new_program_errors = new ProgramErrorList(program);
-        program_error_list.add(new_program_errors);
-        return new_program_errors;
+        jump_to_document_error(doc_iter, pair.error_info, program.get_top_directory());
+        target.move_output_mark_into_focus(pair.build_pane_error);
     }
     
     Program get_active_document_program() {
         string filename = active_filename();
         return Program.find_containing(filename);
     }
-    
-    ProgramErrorList? get_document_error_history() {
-        Program document_program = get_active_document_program();
-        
-        foreach (ProgramErrorList p in program_error_list) {
-            if (p.program == document_program)
-                return p;
-        }
-        
-        // Since no ProgramErrorList exists for this file yet, create one
-        ProgramErrorList new_program_errors = new ProgramErrorList(document_program);
-        program_error_list.add(new_program_errors);
-        return new_program_errors;
-    }
-    
+
     bool active_document_is_valid_vala_file() {
         string filename = active_filename();
         return filename != null && Program.is_vala(filename);
@@ -873,30 +841,30 @@ class Instance : Object {
         if (active_filename() == null)
             return;
     
-        ProgramErrorList program_errors = get_document_error_history();
+        Program program = get_active_document_program();
         
-        if (program_errors == null || program_errors.error_history.size == 0)
+        if (program.error_list == null || program.error_list.errors.size == 0)
             return;
     
-        if (program_errors.error_index < program_errors.error_history.size - 1)
-            ++program_errors.error_index;
+        if (program.error_list.error_index < program.error_list.errors.size - 1)
+            ++program.error_list.error_index;
         
-        move_to_error(program_errors);
+        move_to_error(program);
     }
-    
+
     void on_prev_error() {
         if (active_filename() == null)
             return;
     
-        ProgramErrorList program_errors = get_document_error_history();
+        Program program = get_active_document_program();
         
-        if (program_errors == null || program_errors.error_history.size == 0)
+        if (program.error_list == null || program.error_list.errors.size == 0)
             return;
     
-        if (program_errors.error_index > 0)
-            --program_errors.error_index;
+        if (program.error_list.error_index > 0)
+            --program.error_list.error_index;
         
-        move_to_error(program_errors);
+        move_to_error(program);
     }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -957,8 +925,8 @@ class Instance : Object {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
     bool errors_exist() {
-        ProgramErrorList program_errors = get_document_error_history();
-        return program_errors.error_history.size != 0;
+        Program program = get_active_document_program();
+        return program.error_list.errors.size != 0;
     }
     
     bool program_exists_for_active_document() {

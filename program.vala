@@ -529,6 +529,8 @@ class Makefile : Object {
 }
 
 class Program : Object {
+    public ErrorList error_list;
+
 	string top_directory;
     ArrayList<SourceFile> sources = new ArrayList<SourceFile>();
 	
@@ -539,6 +541,7 @@ class Program : Object {
 	bool recursive_project;
 
 	Program(string directory) {
+	    error_list = null;
 	    top_directory = null;
         makefile = new Makefile();
     	
@@ -764,9 +767,9 @@ class Program : Object {
 		// get_makefile_directory will set top_directory to the path of the makefile it found - 
 		// if the path is the same as the old top_directory, then no changes have been made
         File current_dir = File.new_for_path(Path.get_dirname(sourcefile_path));
+        program.get_makefile_directory(current_dir);
 
-        if (program.get_makefile_directory(current_dir) && 
-            old_top_directory == program.top_directory)
+        if (old_top_directory == program.top_directory)
             return;
             
         program.top_directory = current_dir.get_path();
@@ -775,11 +778,11 @@ class Program : Object {
         // 1) delete the old root
         assert(programs.size > 0);
         programs.remove(program);
-        
-         // 2) delete root in new build root if there
-        Program? old_prog_at_new_root = find_program(program.top_directory);
-        if (old_prog_at_new_root != null)
-            programs.remove(old_prog_at_new_root);
+
+         // 2) delete a program rooted at the new directory if one exists
+        foreach (Program p in programs)
+            if (p.top_directory == program.top_directory)
+                programs.remove(p);
             
          // 3) create a new program at new build root
         new Program(program.top_directory);
