@@ -224,7 +224,7 @@ class Instance : Object {
         
 	    { "Project", null, "_Project" },   // top-level menu
 
-	    { "ProjectBuild", Gtk.STOCK_CONVERT, "_Build", "<shift><ctrl>b",
+	    { "ProjectBuild", Gtk.STOCK_CONVERT, "_Build", "<ctrl><alt>b",
 	      "Build the project", on_build },
 	    { "ProjectRun", Gtk.STOCK_EXECUTE, "_Run", "<ctrl><alt>r",
 	      "Build the project", on_run }
