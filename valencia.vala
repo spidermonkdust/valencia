@@ -45,8 +45,8 @@ Gtk.TextIter iter_at_line_offset(Gtk.TextBuffer buffer, int line, int offset) {
     Gtk.TextIter iter;
     buffer.get_iter_at_line(out iter, line);
     int len = iter.get_chars_in_line() - 1;     // subtract 1 for \n
-    if (len < 0)	// no \n was present, e.g. in an empty file
-    	len = 0;
+    if (len < 0)    // no \n was present, e.g. in an empty file
+        len = 0;
     int end = int.min(len, offset);
     Gtk.TextIter ret;
     buffer.get_iter_at_line_offset(out ret, line, end);
@@ -80,74 +80,74 @@ Gedit.Tab? find_tab(string filename, out Gedit.Window window) {
     
     foreach (Gedit.Window w in Gedit.App.get_default().get_windows()) {
         Gedit.Tab tab = w.get_tab_from_uri(uri);
-		if (tab != null) {
-			window = w;
-			return tab;
-		}
-	}
-	return null;
+        if (tab != null) {
+            window = w;
+            return tab;
+        }
+    }
+    return null;
 }
 
 abstract class Destination : Object {
-	public abstract void get_range(Gtk.TextBuffer buffer,
-								   out Gtk.TextIter start, out Gtk.TextIter end);
+    public abstract void get_range(Gtk.TextBuffer buffer,
+                                   out Gtk.TextIter start, out Gtk.TextIter end);
 }
 
 class LineNumber : Destination {
-	int line;	// starting from 0
-	
-	public LineNumber(int line) { this.line = line; }
-	
-	public override void get_range(Gtk.TextBuffer buffer,
-								   out Gtk.TextIter start, out Gtk.TextIter end) {
-		Gtk.TextIter iter;
-		buffer.get_iter_at_line(out iter, line);
-		get_line_start_end(iter, out start, out end);
-	}
+    int line;    // starting from 0
+    
+    public LineNumber(int line) { this.line = line; }
+    
+    public override void get_range(Gtk.TextBuffer buffer,
+                                   out Gtk.TextIter start, out Gtk.TextIter end) {
+        Gtk.TextIter iter;
+        buffer.get_iter_at_line(out iter, line);
+        get_line_start_end(iter, out start, out end);
+    }
 }
 
 class LineCharRange : Destination {
-	int start_line;		// starting from 0
-	int start_char;
-	int end_line;
-	int end_char;
-	
-	public LineCharRange(int start_line, int start_char, int end_line, int end_char) {
-		this.start_line = start_line;
-		this.start_char = start_char;
-		this.end_line = end_line;
-		this.end_char = end_char;
-	}
-	
-	public override void get_range(Gtk.TextBuffer buffer,
-								   out Gtk.TextIter start, out Gtk.TextIter end) {
-	    start = iter_at_line_offset(buffer, start_line, start_char);
-	    end = iter_at_line_offset(buffer, end_line, end_char);
-	}
+    int start_line;        // starting from 0
+    int start_char;
+    int end_line;
+    int end_char;
+    
+    public LineCharRange(int start_line, int start_char, int end_line, int end_char) {
+        this.start_line = start_line;
+        this.start_char = start_char;
+        this.end_line = end_line;
+        this.end_char = end_char;
+    }
+    
+    public override void get_range(Gtk.TextBuffer buffer,
+                                   out Gtk.TextIter start, out Gtk.TextIter end) {
+        start = iter_at_line_offset(buffer, start_line, start_char);
+        end = iter_at_line_offset(buffer, end_line, end_char);
+    }
 }
 
 class CharRange : Destination {
-	int start_char;
-	int end_char;
-	
-	public CharRange(int start_char, int end_char) {
-		this.start_char = start_char;
-		this.end_char = end_char;
-	}
-	
-	public override void get_range(Gtk.TextBuffer buffer,
-								   out Gtk.TextIter start, out Gtk.TextIter end) {
-		buffer.get_iter_at_offset(out start, start_char);
-		buffer.get_iter_at_offset(out end, end_char);
-	}	
+    int start_char;
+    int end_char;
+    
+    public CharRange(int start_char, int end_char) {
+        this.start_char = start_char;
+        this.end_char = end_char;
+    }
+    
+    public override void get_range(Gtk.TextBuffer buffer,
+                                   out Gtk.TextIter start, out Gtk.TextIter end) {
+        buffer.get_iter_at_offset(out start, start_char);
+        buffer.get_iter_at_offset(out end, end_char);
+    }    
 }
 
 class ErrorInfo : Object {
-	public string filename;
-	public string start_line;
-	public string start_char;
-	public string end_line;
-	public string end_char;
+    public string filename;
+    public string start_line;
+    public string start_char;
+    public string end_line;
+    public string end_char;
 }
 
 class ErrorPair : Object {
@@ -217,17 +217,17 @@ class Instance : Object {
           "Jump to a symbol's definition", on_go_to_definition },
         { "SearchGoBack", Gtk.STOCK_GO_BACK, "Go _Back", "<alt>Left",
           "Go back after jumping to a definition", on_go_back },
-	    { "SearchNextError", null, "_Next Error", "<ctrl><alt>n",
-	      "Go to the next compiler error in the ouput and view panes", on_next_error },
-	    { "SearchPrevError", null, "_Previous Error", "<ctrl><alt>p",
-	      "Go to the previous compiler error in the ouput and view panes", on_prev_error },
+        { "SearchNextError", null, "_Next Error", "<ctrl><alt>n",
+          "Go to the next compiler error in the ouput and view panes", on_next_error },
+        { "SearchPrevError", null, "_Previous Error", "<ctrl><alt>p",
+          "Go to the previous compiler error in the ouput and view panes", on_prev_error },
         
-	    { "Project", null, "_Project" },   // top-level menu
+        { "Project", null, "_Project" },   // top-level menu
 
-	    { "ProjectBuild", Gtk.STOCK_CONVERT, "_Build", "<ctrl><alt>b",
-	      "Build the project", on_build },
-	    { "ProjectRun", Gtk.STOCK_EXECUTE, "_Run", "<ctrl><alt>r",
-	      "Build the project", on_run }
+        { "ProjectBuild", Gtk.STOCK_CONVERT, "_Build", "<ctrl><alt>b",
+          "Build the project", on_build },
+        { "ProjectRun", Gtk.STOCK_EXECUTE, "_Run", "<ctrl><alt>r",
+          "Build the project", on_run }
     };
 
     const string ui = """
@@ -257,7 +257,7 @@ class Instance : Object {
         this.plugin = plugin;
         
         if (history == null)
-        	history = new ArrayList<Gtk.TextMark>();
+            history = new ArrayList<Gtk.TextMark>();
 
         // Output pane
         
@@ -345,28 +345,28 @@ class Instance : Object {
         Signal.connect(window, "tab-removed", (Callback) tab_removed_callback, this);
     }
 
-	static void tab_added_callback(Gedit.Window window, Gedit.Tab tab, Instance instance) {
-		Gedit.Document document = tab.get_document();
-		Signal.connect(document, "saved", (Callback) all_save_callback, instance);
-	}
-	
-	static void tab_removed_callback(Gedit.Window window, Gedit.Tab tab, Instance instance) {
-		Gedit.Document document = tab.get_document();
+    static void tab_added_callback(Gedit.Window window, Gedit.Tab tab, Instance instance) {
+        Gedit.Document document = tab.get_document();
+        Signal.connect(document, "saved", (Callback) all_save_callback, instance);
+    }
+    
+    static void tab_removed_callback(Gedit.Window window, Gedit.Tab tab, Instance instance) {
+        Gedit.Document document = tab.get_document();
 
-		if (document.get_modified()) {
-			// We're closing a document without saving changes.  Reparse the symbol tree
-			// from the source file on disk.
-			string path = document_filename(document);
-			if (path != null)
-				Program.update_any(path, null);
-		}
-	}
+        if (document.get_modified()) {
+            // We're closing a document without saving changes.  Reparse the symbol tree
+            // from the source file on disk.
+            string path = document_filename(document);
+            if (path != null)
+                Program.update_any(path, null);
+        }
+    }
 
-	// TODO: Merge this method with saved_callback, below.
+    // TODO: Merge this method with saved_callback, below.
     static void all_save_callback(Gedit.Document document, void *arg1, Instance instance) {
-		string path = document_filename(document);
-   		Program.update_any(path, buffer_contents(document));
-	}
+        string path = document_filename(document);
+           Program.update_any(path, buffer_contents(document));
+    }
     
     bool scroll_to_end() {
         Gtk.TextIter end;
@@ -520,23 +520,23 @@ class Instance : Object {
     }
     
     void scroll_tab_to_iter(Gedit.Tab tab, Gtk.TextIter iter) {
-	    Gedit.View view = tab.get_view();
-	    view.scroll_to_iter(iter, 0.2, false, 0.0, 0.0);
+        Gedit.View view = tab.get_view();
+        view.scroll_to_iter(iter, 0.2, false, 0.0, 0.0);
         view.grab_focus();
     }
     
     void go(Gedit.Tab tab, Destination dest) {
-	    Gedit.Document document = tab.get_document();
-	    Gtk.TextIter start;
-	    Gtk.TextIter end;
-	    dest.get_range(document, out start, out end);
+        Gedit.Document document = tab.get_document();
+        Gtk.TextIter start;
+        Gtk.TextIter end;
+        dest.get_range(document, out start, out end);
         document.select_range(start, end);
         scroll_tab_to_iter(tab, start);
     }
     
     void on_document_loaded(Gedit.Document document) {
         if (document_filename(document) == target_filename) {
-        	Gedit.Tab tab = Gedit.Tab.get_from_document(document);
+            Gedit.Tab tab = Gedit.Tab.get_from_document(document);
             go(tab, destination);
             target_filename = null;
             destination = null;
@@ -548,16 +548,16 @@ class Instance : Object {
     }
 
     void jump(string filename, Destination dest) {
-		Gedit.Window w;
-		Gedit.Tab tab = find_tab(filename, out w);
-		if (tab != null) {
-		    w.set_active_tab(tab);
-            w.present();		    
-		    go(tab, dest);
+        Gedit.Window w;
+        Gedit.Tab tab = find_tab(filename, out w);
+        if (tab != null) {
+            w.set_active_tab(tab);
+            w.present();            
+            go(tab, dest);
             return;
-		}
-		
-		tab = window.create_tab_from_uri(filename_to_uri(filename), null, 0, false, true);
+        }
+        
+        tab = window.create_tab_from_uri(filename_to_uri(filename), null, 0, false, true);
         target_filename = filename;
         destination = dest;
         Signal.connect(tab.get_document(), "loaded", (Callback) document_loaded_callback, this);
@@ -567,12 +567,12 @@ class Instance : Object {
     //   foo.vala:297.15-297.19: ...  (valac errors)
     //   foo.c:268: ...               (GCC errors, containing a line number only)
     void init_error_regex() {
-    	try {
-	    	error_regex = new Regex("""^(.*):(\d+)(?:\.(\d+)-(\d+)\.(\d+))?:""");
-	    } catch (RegexError e) {
-	        stderr.puts("A RegexError occured when creating a new regular expression.\n");
-	    	return;		// TODO: report error
-	    }
+        try {
+            error_regex = new Regex("""^(.*):(\d+)(?:\.(\d+)-(\d+)\.(\d+))?:""");
+        } catch (RegexError e) {
+            stderr.puts("A RegexError occured when creating a new regular expression.\n");
+            return;        // TODO: report error
+        }
     }
     
     string get_line(Gtk.TextIter iter) {
@@ -588,27 +588,27 @@ class Instance : Object {
         string line = get_line(iter);
         MatchInfo info;
         if (error_regex.match(line, 0, out info)) {
-        	ErrorInfo e = new ErrorInfo();
-        	e.filename = info.fetch(1);
-        	e.start_line = info.fetch(2);
-        	e.start_char = info.fetch(3);
-        	e.end_line = info.fetch(4);
-        	e.end_char = info.fetch(5);
-        	return e;
+            ErrorInfo e = new ErrorInfo();
+            e.filename = info.fetch(1);
+            e.start_line = info.fetch(2);
+            e.start_char = info.fetch(3);
+            e.end_line = info.fetch(4);
+            e.end_char = info.fetch(5);
+            return e;
         }
         else return null;
     }
     
     // Return true if s is composed of ^^^ characters pointing to an error snippet above.
     bool is_snippet_marker(string s) {
-    	weak string p = s;
-    	while (p != "") {
-    		unichar c = p.get_char();
-    		if (!c.isspace() && c != '^')
-    			return false;
-    		p = p.next_char();
-    	}
-    	return true;
+        weak string p = s;
+        while (p != "") {
+            unichar c = p.get_char();
+            if (!c.isspace() && c != '^')
+                return false;
+            p = p.next_char();
+        }
+        return true;
     }
     
     void tag_text_buffer_line(Gtk.TextBuffer buffer, Gtk.TextTag tag, Gtk.TextIter iter) {
@@ -625,10 +625,10 @@ class Instance : Object {
         int line_number = info.start_line.to_int();
         Destination dest;
         if (info.start_char == null)
-        	dest = new LineNumber(line_number - 1);
+            dest = new LineNumber(line_number - 1);
         else
-        	dest = new LineCharRange(line_number - 1, info.start_char.to_int() - 1,
-        					         info.end_line.to_int() - 1, info.end_char.to_int());
+            dest = new LineCharRange(line_number - 1, info.start_char.to_int() - 1,
+                                     info.end_line.to_int() - 1, info.end_char.to_int());
         
         jump(filename, dest);
     }
@@ -649,18 +649,18 @@ class Instance : Object {
         Gtk.TextIter iter = get_insert_iter(output_buffer);
         ErrorInfo info = error_info(iter);
         if (info == null) {
-        	// Is this an error snippet?
-        	Gtk.TextIter next = iter;
-        	if (!next.forward_line() || !is_snippet_marker(get_line(next)))
-        		return false;
-        	
-        	// Yes; look for error information on the previous line.
-        	Gtk.TextIter prev = iter;
-        	if (prev.backward_line())
-        		info = error_info(prev);
+            // Is this an error snippet?
+            Gtk.TextIter next = iter;
+            if (!next.forward_line() || !is_snippet_marker(get_line(next)))
+                return false;
+            
+            // Yes; look for error information on the previous line.
+            Gtk.TextIter prev = iter;
+            if (prev.backward_line())
+                info = error_info(prev);
         }
         if (info == null)
-        	return false;
+            return false;
 
         tag_text_buffer_line(output_buffer, highlight_tag, iter);
         
@@ -676,37 +676,37 @@ class Instance : Object {
         Gedit.Document document = window.get_active_document();
         string filename = document_filename(document);
         if (filename == null)
-        	return;
+            return;
         Program program = Program.find_containing(filename);
 
-		// Reparse any modified documents in this program.
-	    foreach (Gedit.Document d in Gedit.App.get_default().get_documents())
-	    	if (d.get_modified()) {
-	    		string path = document_filename(d);
-	    		if (path != null)
-		    		program.update(path, buffer_contents(d));
-	    	}
+        // Reparse any modified documents in this program.
+        foreach (Gedit.Document d in Gedit.App.get_default().get_documents())
+            if (d.get_modified()) {
+                string path = document_filename(d);
+                if (path != null)
+                    program.update(path, buffer_contents(d));
+            }
         
         weak string source = buffer_contents(document);
         Gtk.TextIter insert = get_insert_iter(document);
         int pos = insert.get_offset();
         CompoundName name = new Parser().name_at(source, pos);
         if (name == null)
-        	return;
+            return;
         
         SourceFile sf = program.find_source(filename);
-		Symbol sym = sf.resolve(name, pos);
-		if (sym == null)
-			return;
+        Symbol sym = sf.resolve(name, pos);
+        if (sym == null)
+            return;
 
-		Gtk.TextMark mark = document.create_mark(null, insert, false);
-		history.add(mark);
-		if (history.size > MAX_HISTORY)
-		    history.remove_at(0);
+        Gtk.TextMark mark = document.create_mark(null, insert, false);
+        history.add(mark);
+        if (history.size > MAX_HISTORY)
+            history.remove_at(0);
 
-		SourceFile dest = sym.source;
-		jump(dest.filename, new CharRange(sym.start, sym.start + (int) sym.name.length));
-	}
+        SourceFile dest = sym.source;
+        jump(dest.filename, new CharRange(sym.start, sym.start + (int) sym.name.length));
+    }
 
     void move_output_mark_into_focus(Gtk.TextMark mark) {
         Gtk.TextBuffer output = mark.get_buffer();
@@ -718,32 +718,32 @@ class Instance : Object {
         tag_text_buffer_line(output_buffer, highlight_tag, iter);
     }
 
-	void on_go_back() {
-		if (history.size == 0)
-			return;
+    void on_go_back() {
+        if (history.size == 0)
+            return;
 
-		Gtk.TextMark mark = history.get(history.size - 1);
-		history.remove_at(history.size - 1);
-		assert(!mark.get_deleted());
+        Gtk.TextMark mark = history.get(history.size - 1);
+        history.remove_at(history.size - 1);
+        assert(!mark.get_deleted());
 
-		Gedit.Document buffer = (Gedit.Document) mark.get_buffer();
-		Gtk.TextIter iter;
-		buffer.get_iter_at_mark(out iter, mark);
-		buffer.delete_mark(mark);
-		buffer.place_cursor(iter);
-		
-		Gedit.Tab tab = Gedit.Tab.get_from_document(buffer);
-	    Gedit.Window window = (Gedit.Window) tab.get_toplevel();
-	    window.set_active_tab(tab);
-		window.present();
-	    
-	    scroll_tab_to_iter(tab, iter);
-	}
+        Gedit.Document buffer = (Gedit.Document) mark.get_buffer();
+        Gtk.TextIter iter;
+        buffer.get_iter_at_mark(out iter, mark);
+        buffer.delete_mark(mark);
+        buffer.place_cursor(iter);
+        
+        Gedit.Tab tab = Gedit.Tab.get_from_document(buffer);
+        Gedit.Window window = (Gedit.Window) tab.get_toplevel();
+        window.set_active_tab(tab);
+        window.present();
+        
+        scroll_tab_to_iter(tab, iter);
+    }
 
     bool can_go_back() {
         if (history.size == 0)
             return false;
-		Gtk.TextMark mark = history.get(history.size - 1);
+        Gtk.TextMark mark = history.get(history.size - 1);
         return !mark.get_deleted();
     }
 
@@ -997,6 +997,6 @@ class Plugin : Gedit.Plugin {
 
 [ModuleInit]
 public Type register_gedit_plugin (TypeModule module) {
-	return typeof (Plugin);
+    return typeof (Plugin);
 }
 
