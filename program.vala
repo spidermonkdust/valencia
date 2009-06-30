@@ -761,18 +761,26 @@ class Program : Object {
 	    
 	    if (program == null)
 	        return;
-	    
+
+        File current_dir = File.new_for_path(Path.get_dirname(sourcefile_path));	    
 	    string old_top_directory = program.top_directory;
+	    string local_directory = current_dir.get_path();
 
 		// get_makefile_directory will set top_directory to the path of the makefile it found - 
 		// if the path is the same as the old top_directory, then no changes have been made
-        File current_dir = File.new_for_path(Path.get_dirname(sourcefile_path));
-        program.get_makefile_directory(current_dir);
+        bool found_root = program.get_makefile_directory(current_dir);
 
-        if (old_top_directory == program.top_directory)
+        // If a root was found and the new and old directories are the same, the old root was found:
+        // nothing changes.
+        if (found_root && old_top_directory == program.top_directory)
             return;
-            
-        program.top_directory = current_dir.get_path();
+        if (!found_root && old_top_directory == local_directory)
+            return;
+
+        // If a new root was found, get_makefile_directory() will have changed program.top_directory
+        // already; if not, then we need to set it to the local directory manually
+        if (!found_root)
+            program.top_directory = local_directory;
 
         // The build root has changed, so: 
         // 1) delete the old root
