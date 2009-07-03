@@ -49,6 +49,7 @@ class Parser : Object {
     }
     
     CompoundName? parse_type() {
+        accept(Token.UNOWNED) || accept(Token.WEAK);
         if (!accept(Token.ID))
             return null;
         CompoundName t = new SimpleName(scanner.val());
@@ -104,9 +105,7 @@ class Parser : Object {
     
     Parameter? parse_parameter() {
         skip_attributes();
-        if (accept(Token.OUT) || accept(Token.REF))
-            accept(Token.UNOWNED) || accept(Token.WEAK);
-        else accept(Token.OWNED);
+        accept(Token.OUT) || accept(Token.REF) || accept(Token.OWNED);
         CompoundName type = parse_type();
         if (type == null || !accept(Token.ID))
             return null;
@@ -173,15 +172,20 @@ class Parser : Object {
         
         // We found no declaration.  Scan through the remainder of the
         // statement, looking for an embedded block.
-        while (true)
+        while (true) {
+            Token t = peek_token();
+            if (t == Token.EOF || t == Token.RIGHT_BRACE)
+                // If we see a right brace, then this statement is unterminated:
+                // it has no semicolon.  This might happen if the user is still typing
+                // the statement.  We don't want to consume the brace character.
+                return null;
             switch (next_token()) {
-                case Token.EOF:
-                case Token.RIGHT_BRACE:
                 case Token.SEMICOLON:
                     return null;
                 case Token.LEFT_BRACE:
                     return parse_block();
             }
+        }
     }
 
     // Parse a block after the opening brace.    
@@ -253,6 +257,12 @@ class Parser : Object {
             case Token.LEFT_PAREN:
                 Method m = new Method(scanner.val(), source);
                 return parse_method(m);
+            case Token.LEFT_BRACE:
+                Property p = new Property(type, scanner.val(), source, scanner.start, 0);
+                next_token();
+                p.body = parse_block();
+                p.end = scanner.end;
+                return p;
             default:
                 skip();
                 return null;
@@ -264,6 +274,7 @@ class Parser : Object {
             case Token.ABSTRACT:
             case Token.CONST:
             case Token.DELEGATE:
+            case Token.EXTERN:
             case Token.INLINE:
             case Token.NEW:
             case Token.OVERRIDE:
@@ -272,9 +283,7 @@ class Parser : Object {
             case Token.PUBLIC:
             case Token.SIGNAL:
             case Token.STATIC:
-            case Token.UNOWNED:
             case Token.VIRTUAL:
-            case Token.WEAK:
                 return true;
             default:
                 return false;

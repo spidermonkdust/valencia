@@ -296,6 +296,26 @@ class Field : Variable {
     protected override string kind() { return "field"; }
 }
 
+class Property : Variable {
+    // A Block containing property getters and/or setters.
+    public Block body;
+
+    public Property(CompoundName type, string name, SourceFile source, int start, int end) {
+        base(type, name, source, start, end);
+    }
+    
+    public override ArrayList<Node>? children() {
+        return single_node(body);
+    }
+
+    protected override string kind() { return "property"; }
+
+    public override void print(int level) {
+        base.print(level);
+        body.print(level + 1);
+    }
+}
+
 // a class, struct, interface or enum
 class Class : TypeSymbol, Scope {
     public ArrayList<CompoundName> super = new ArrayList<CompoundName>();
