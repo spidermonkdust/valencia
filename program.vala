@@ -432,6 +432,16 @@ class SourceFile : Node, Scope {
         return null;
     }
 
+    public Symbol? lookup_in_namespace(string? namespace_name, string name) {
+        foreach (Namespace n in namespaces)
+            if (n.full_name == namespace_name) {
+                Symbol s = n.lookup1(name);
+                if (s != null)
+                    return s;
+            }
+        return null;
+    }
+
     public Symbol? resolve1(CompoundName name, Chain chain, int pos, bool find_type) {
         SimpleName s = name as SimpleName;
         if (s != null)
@@ -679,16 +689,23 @@ class Program : Object {
                filename.has_suffix(".cs");    // C#
     }
     
-    public Symbol? lookup_in_namespace(string? namespace_name, string name) {
+    public Symbol? lookup_in_namespace1(string? namespace_name, string name, bool vapi) {
         foreach (SourceFile source in sources)
-            foreach (Namespace n in source.namespaces)
-                if (n.full_name == namespace_name) {
-                    Symbol s = n.lookup1(name);
-                    if (s != null)
-                        return s;
-                }
+            if (source.filename.has_suffix(".vapi") == vapi) {
+                Symbol s = source.lookup_in_namespace(namespace_name, name);
+                if (s != null)
+                    return s;
+            }
         return null;
     }
+
+    public Symbol? lookup_in_namespace(string? namespace_name, string name) {
+        // First look in non-vapi files; we'd like definitions here to have precedence.
+        Symbol s = lookup_in_namespace1(namespace_name, name, false);
+        if (s == null)
+            s = lookup_in_namespace1(namespace_name, name, true);   // look in .vapi files
+        return s;
+    }    
 
     public SourceFile? find_source(string path) {
         foreach (SourceFile source in sources)
