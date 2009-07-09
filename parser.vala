@@ -104,6 +104,8 @@ class Parser : Object {
     }
     
     Parameter? parse_parameter() {
+        if (accept(Token.ELLIPSIS))
+            return null;    // end of parameter list
         skip_attributes();
         accept(Token.OUT) || accept(Token.REF) || accept(Token.OWNED);
         CompoundName type = parse_type();

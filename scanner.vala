@@ -15,8 +15,8 @@ enum Token {
     STRING_LITERAL,
     ID,
     
-    // punctuation characters
-    ASTERISK, LEFT_BRACE, RIGHT_BRACE, LEFT_BRACKET, RIGHT_BRACKET, COLON, COMMA, EQUALS,
+    // punctuation
+    ASTERISK, LEFT_BRACE, RIGHT_BRACE, LEFT_BRACKET, RIGHT_BRACKET, COLON, COMMA, EQUALS, ELLIPSIS,
     HASH, LEFT_PAREN, RIGHT_PAREN, PERIOD, QUESTION_MARK, SEMICOLON, LESS_THAN, GREATER_THAN,
     
     // keywords
@@ -89,6 +89,11 @@ class Scanner : Object {
     
     unichar peek_char() { return input.get_char(); }
     
+    // Peek two characters ahead.
+    unichar peek_char2() {
+        return input == "" ? '\0' : input.next_char().get_char();
+    }
+
     unichar next_char() {
         unichar c = peek_char();
         advance();
@@ -189,7 +194,13 @@ class Scanner : Object {
                 case '#': return Token.HASH;
                 case '(': return Token.LEFT_PAREN;
                 case ')': return Token.RIGHT_PAREN;
-                case '.': return Token.PERIOD;
+                case '.':
+                    if (peek_char() == '.' && peek_char2() == '.') {
+                        advance();
+                        advance();
+                        return Token.ELLIPSIS;
+                    }
+                    return Token.PERIOD;
                 case '?': return Token.QUESTION_MARK;
                 case ';': return Token.SEMICOLON;
                 case '<': return Token.LESS_THAN;
