@@ -9,7 +9,7 @@ LIBS = --pkg gee-1.0 --pkg gedit-2.20 --pkg vte
 DIST_FILES = $(SOURCES) \
              Makefile \
              gedit-2.20.deps gedit-2.20.vapi valencia.gedit-plugin \
-             AUTHORS COPYING INSTALL NEWS README
+             AUTHORS COPYING INSTALL NEWS README THANKS
 DIST_TAR = $(PLUGIN)-$(VERSION).tar
 DIST_TAR_BZ2 = $(DIST_TAR).bz2
 
