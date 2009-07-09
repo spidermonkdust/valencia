@@ -926,7 +926,7 @@ class Instance : Object {
 
     bool errors_exist() {
         Program program = get_active_document_program();
-        return program.error_list.errors.size != 0;
+        return program.error_list != null && program.error_list.errors.size != 0;
     }
     
     bool program_exists_for_active_document() {
