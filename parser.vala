@@ -46,8 +46,8 @@ class Parser : Object {
                         return;
                     break;
             }
-    }
-    
+   }
+
     CompoundName? parse_type() {
         accept(Token.UNOWNED) || accept(Token.WEAK);
         if (!accept(Token.ID))
@@ -102,7 +102,7 @@ class Parser : Object {
             next_token();
         }
     }
-    
+
     Parameter? parse_parameter() {
         if (accept(Token.ELLIPSIS))
             return null;    // end of parameter list
@@ -157,7 +157,7 @@ class Parser : Object {
     Statement? parse_statement() {
         if (accept(Token.FOREACH))
             return parse_foreach();
-            
+
         CompoundName type = parse_type();
         if (type != null && accept(Token.ID)) {
             string name = scanner.val();
@@ -167,6 +167,8 @@ class Parser : Object {
                 type = parse_expression();
                 if (v.type.to_string() == "var" && type != null)
                     v.type = type;
+                // If this expression was an array or struct initializer, make sure to complete it
+                accept(Token.RIGHT_BRACE);
             }
             if (accept(Token.SEMICOLON))
                 return new DeclarationStatement(v, start, scanner.end);
@@ -204,7 +206,7 @@ class Parser : Object {
     }
 
     // Parse a method.  Return the method object, or null on error.
-    Method? parse_method(Method m) {
+    Method? parse_method(Method m, string input) {
         m.start = scanner.start;
         if (!accept(Token.LEFT_PAREN)) {
             skip();
@@ -230,21 +232,26 @@ class Parser : Object {
             if (t == Token.EOF)
                 return null;
         } while (t != Token.LEFT_BRACE && t != Token.SEMICOLON);
+
+        // Take the string from the return type all the way to the last ')'
+        m.update_prototype(input.ndup((char *) scanner.get_start() - (char *) input));
+        
         if (t == Token.LEFT_BRACE)
             m.body = parse_block();
 
         m.end = scanner.end;
         return m;
     }
-    
+
     Symbol? parse_method_or_field(string? enclosing_class) {
+        weak string input = scanner.get_start_after_comments();
         CompoundName type = parse_type();
         if (type == null) {
             skip();
             return null;
         }
         if (peek_token() == Token.LEFT_PAREN && type.to_string() == enclosing_class)
-            return parse_method(new Constructor(source));
+            return parse_method(new Constructor(source), input);
         if (!accept(Token.ID)) {
             skip();
             return null;
@@ -258,7 +265,7 @@ class Parser : Object {
                 return f;
             case Token.LEFT_PAREN:
                 Method m = new Method(scanner.val(), source);
-                return parse_method(m);
+                return parse_method(m, input);
             case Token.LEFT_BRACE:
                 Property p = new Property(type, scanner.val(), source, scanner.start, 0);
                 next_token();
@@ -474,7 +481,7 @@ class Parser : Object {
         while (accept(Token.USING)) {
             string s = parse_using();
             if (s != null)
-                source.using_namespaces.add(s);
+                source.add_using_namespace(s);
         }
         current_namespace = source.top;
         while (!scanner.eof()) {
@@ -484,14 +491,16 @@ class Parser : Object {
         }
         source.top.end = scanner.end;
     }
-    
+
     public CompoundName? name_at(string input, int pos) {
         scanner = new Scanner(input);
         while (scanner.end < pos) {
             Token t = scanner.next_token();
             if (t == Token.EOF)
                 break;
-            if (t == Token.ID) {
+            if (t == Token.THIS) // the name could be a member of a class
+                accept(Token.PERIOD);
+            else if (t == Token.ID) {
                 CompoundName name = new SimpleName(scanner.val());
                 while (true) {
                     if (scanner.end >= pos)
@@ -504,6 +513,52 @@ class Parser : Object {
         }
         return null;
     }
+
+    public CompoundName? method_at(string input, int pos, out int final_pos) {
+        Stack<Pair<int, CompoundName>> stack = new Stack<Pair<int, CompoundName>>();
+        int free_left_parens = 0;
+        
+        scanner = new Scanner(input);
+        while (scanner.end < pos) {
+            Token t = scanner.next_token();
+            if (t == Token.EOF) {
+                break;
+            } else if (t == Token.RIGHT_PAREN) {
+                // Try to match parentheses
+                if (stack.size() > 0) {
+                    stack.pop();
+                } else --free_left_parens;
+            } else if (t == Token.LEFT_PAREN) {
+                ++free_left_parens;
+            } else if (t == Token.ID) {
+                CompoundName name = new SimpleName(scanner.val());
+                while (true) {
+                    if (scanner.end >= pos) {
+                        if (stack.size() > 0) {
+                            final_pos = stack.top().first;
+                            return stack.top().second;
+                        }
+                        
+                        return null;
+                    }
+                    if (!accept(Token.PERIOD) || !accept(Token.ID))
+                        break;
+                    name = new QualifiedName(name, scanner.val());
+                }
+                if (accept(Token.LEFT_PAREN)) {
+                    stack.push(new Pair<int, CompoundName>(scanner.start, name));
+                }
+            }
+        }
+        
+        if (stack.size() > 0) {
+            final_pos = stack.top().first;
+            return stack.top().second;
+        }
+        
+        return null;
+    }
+
 }
 
 void main(string[] args) {

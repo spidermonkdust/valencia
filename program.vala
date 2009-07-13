@@ -257,8 +257,11 @@ class Construct : Node {
 class Method : Symbol, Scope {
     public ArrayList<Parameter> parameters = new ArrayList<Parameter>();
     public Block body;
+    string prototype = "";
     
-    public Method(string? name, SourceFile source) { base(name, source, 0, 0); }
+    public Method(string? name, SourceFile source) { 
+        base(name, source, 0, 0); 
+    }
     
     public override ArrayList<Node>? children() { return single_node(body);    }
     
@@ -278,6 +281,29 @@ class Method : Symbol, Scope {
         if (body != null)
             body.print(level + 1);
     }
+    
+    public void update_prototype(string proto) {
+        prototype = proto;
+        prototype.chomp();
+
+        // Clean up newlines and remove extra spaces
+        if (prototype.contains("\n")) {
+            string[] split_lines = prototype.split("\n");
+            prototype = "";
+            for (int i = 0; split_lines[i] != null; ++i) {
+                weak string str = split_lines[i];
+                str.strip();
+                prototype += str;
+                if (split_lines[i + 1] != null)
+                    prototype += " ";
+            }
+        }
+    }
+    
+    public string to_string() {
+        return prototype;
+    }
+    
 }
 
 class Constructor : Method {
@@ -400,7 +426,7 @@ class SourceFile : Node, Scope {
     public weak Program program;
     public string filename;
     
-    public ArrayList<string> using_namespaces = new ArrayList<string>();
+    ArrayList<string> using_namespaces = new ArrayList<string>();
     public ArrayList<Namespace> namespaces = new ArrayList<Namespace>();
     public Namespace top;
     
@@ -413,8 +439,9 @@ class SourceFile : Node, Scope {
     void alloc_top() {
         top = new Namespace(null, null, this);
         namespaces.add(top);
+        using_namespaces.add("GLib");
     }
-    
+
     public void clear() {
         using_namespaces.clear();
         namespaces.clear();
@@ -422,6 +449,13 @@ class SourceFile : Node, Scope {
     }
 
     public override ArrayList<Node>? children() { return single_node(top);    }
+
+    public void add_using_namespace(string name) {
+        // Make sure there isn't a duplicate, since GLib is always added
+        if (name == "GLib")
+            return;
+        using_namespaces.add(name);
+    }
     
     Symbol? lookup(string name, int pos) {
         foreach (string ns in using_namespaces) {
@@ -431,7 +465,7 @@ class SourceFile : Node, Scope {
         }
         return null;
     }
-
+    
     public Symbol? lookup_in_namespace(string? namespace_name, string name) {
         foreach (Namespace n in namespaces)
             if (n.full_name == namespace_name) {
@@ -468,7 +502,7 @@ class SourceFile : Node, Scope {
     
     public override void print(int level) {
         top.print(level);
-    }    
+    }
 }
 
 class Makefile : Object {
@@ -563,6 +597,7 @@ class Program : Object {
 
     string top_directory;
     ArrayList<SourceFile> sources = new ArrayList<SourceFile>();
+    static ArrayList<SourceFile> system_sources = new ArrayList<SourceFile>();
     
     static ArrayList<Program> programs;
     
@@ -579,16 +614,15 @@ class Program : Object {
         // (meaning no makefile at all has been found), then just set it to the default directory
         File makefile_dir = File.new_for_path(directory);
         if (get_makefile_directory(makefile_dir)) {
-            // Recursively add source files to the program
-            scan_directory_for_sources(top_directory, true);
             recursive_project = true;
         } else {
             // If no root directory was found, make sure there is a local top directory, and 
             // scan only that directory for sources
             top_directory = directory;
-            scan_directory_for_sources(top_directory, false);
             recursive_project = false;
         }
+        
+        scan_directory_for_sources(top_directory, sources, recursive_project);
         
         programs.add(this);
     }
@@ -649,7 +683,8 @@ class Program : Object {
     }
     
     // Adds vala files in the directory to the program, as well as parses them
-    void scan_directory_for_sources(string directory, bool recursive) {
+    void scan_directory_for_sources(string directory, ArrayList<SourceFile> source_list, 
+                                    bool recursive) {
         Dir dir;
         try {
             dir = Dir.open(directory);
@@ -661,8 +696,15 @@ class Program : Object {
         Parser parser = new Parser();
         while (true) {
             string file = dir.read_name();
+            // doesn't parse posix files to avoid built-in type vala profile conflicts (posix.vapi
+            // contains definitions for 'int', jumping to definition may open posix.vapi instead
+            // of glib.vapi)
             if (file == null)
                 break;
+                
+            if (file == "posix.vapi")
+                continue;
+
              string path = Path.build_filename(directory, file);
 
             if (is_vala(file)) {
@@ -676,9 +718,9 @@ class Program : Object {
                     return;
                 }
                 parser.parse(source, contents);
-                sources.add(source);
+                source_list.add(source);
             } else if (recursive && GLib.FileUtils.test(path, GLib.FileTest.IS_DIR)) {
-                scan_directory_for_sources(path, true);
+                scan_directory_for_sources(path, source_list, true);
             }
         }
     }
@@ -688,9 +730,10 @@ class Program : Object {
                filename.has_suffix(".vapi") ||
                filename.has_suffix(".cs");    // C#
     }
-    
-    public Symbol? lookup_in_namespace1(string? namespace_name, string name, bool vapi) {
-        foreach (SourceFile source in sources)
+
+    public Symbol? lookup_in_namespace1(ArrayList<SourceFile> source_list, string? namespace_name, 
+                                        string name, bool vapi) {
+        foreach (SourceFile source in source_list)
             if (source.filename.has_suffix(".vapi") == vapi) {
                 Symbol s = source.lookup_in_namespace(namespace_name, name);
                 if (s != null)
@@ -701,9 +744,12 @@ class Program : Object {
 
     public Symbol? lookup_in_namespace(string? namespace_name, string name) {
         // First look in non-vapi files; we'd like definitions here to have precedence.
-        Symbol s = lookup_in_namespace1(namespace_name, name, false);
-        if (s == null)
-            s = lookup_in_namespace1(namespace_name, name, true);   // look in .vapi files
+        Symbol s = lookup_in_namespace1(sources, namespace_name, name, false);
+        if (s == null) {
+            s = lookup_in_namespace1(sources, namespace_name, name, true);   // look in .vapi files
+            if (s == null)
+                s = lookup_in_namespace1(system_sources, namespace_name, name, true);
+        }
         return s;
     }    
 
@@ -742,11 +788,12 @@ class Program : Object {
         if (programs == null)
             programs = new ArrayList<Program>();
             
-        foreach (Program p in programs)
+        foreach (Program p in programs) {
             if (p.recursive_project && dir_has_parent(dir, p.get_top_directory()))
                 return p;
             else if (p.top_directory == dir)
                 return p;
+        }
         return null;
     }
     
@@ -850,6 +897,24 @@ class Program : Object {
     
     public void reparse_makefile() {
         makefile.reparse();
+    }
+    
+    public void parse_system_vapi_files() {
+        // Don't parse system vapi files twice
+        if (system_sources.size > 0)
+            return;
+            
+        string[] null_dirs = {};
+        
+        // Sort of a hack to get the path to the system vapi file directory. Gedit may hang or 
+        // crash if the vala compiler .so is not present...
+        Vala.CodeContext context = new Vala.CodeContext();
+        string path = context.get_package_path("gobject-2.0", null_dirs);
+        string directory = Path.get_dirname(path);
+    
+        // If the user is operating from the system vapi directory, don't reparse all the files    
+        if (directory != top_directory)
+            scan_directory_for_sources(directory, system_sources, true);
     }
     
 }

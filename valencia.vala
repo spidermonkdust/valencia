@@ -184,6 +184,7 @@ class Instance : Object {
     Gtk.MenuItem prev_error_menu_item;
     Gtk.MenuItem build_menu_item;
     Gtk.MenuItem run_menu_item;
+    Gtk.MenuItem display_tooltip_menu_item;
 
     uint ui_id;
     
@@ -211,6 +212,8 @@ class Instance : Object {
 
     static ArrayList<Gtk.TextMark> history;
     const int MAX_HISTORY = 10;
+
+    Tooltip tip;
     
     const Gtk.ActionEntry[] entries = {
         { "SearchGoToDefinition", null, "Go to _Definition", "F12",
@@ -221,6 +224,8 @@ class Instance : Object {
           "Go to the next compiler error in the ouput and view panes", on_next_error },
         { "SearchPrevError", null, "_Previous Error", "<ctrl><alt>p",
           "Go to the previous compiler error in the ouput and view panes", on_prev_error },
+        { "SearchDisplayTooltip", null, "Display _Tooltip", "<ctrl>space",
+          "Display a tooltip for the method you are typing", on_display_tooltip },
         
         { "Project", null, "_Project" },   // top-level menu
 
@@ -240,6 +245,8 @@ class Instance : Object {
                 <separator/>
                 <menuitem name="SearchNextErrorMenu" action="SearchNextError"/>
                 <menuitem name="SearchPrevErrorMenu" action="SearchPrevError"/>
+                <separator/>
+                <menuitem name="SearchDisplayTooltipMenu" action="SearchDisplayTooltip"/>
               </placeholder>
             </menu>
             <placeholder name="ExtraMenu_1">
@@ -258,6 +265,9 @@ class Instance : Object {
         
         if (history == null)
             history = new ArrayList<Gtk.TextMark>();
+
+        // Tooltips        
+        tip = new Tooltip(window);
 
         // Output pane
         
@@ -331,6 +341,10 @@ class Instance : Object {
             "/MenuBar/SearchMenu/SearchOps_8/SearchPrevErrorMenu");
         assert(prev_error_menu_item != null);
         
+        display_tooltip_menu_item = (Gtk.MenuItem) manager.get_widget(
+            "/MenuBar/SearchMenu/SearchOps_8/SearchDisplayTooltipMenu");
+        assert(display_tooltip_menu_item != null);
+        
         build_menu_item = (Gtk.MenuItem) manager.get_widget(
             "/MenuBar/ExtraMenu_1/ProjectMenu/ProjectBuildMenu");
         assert(build_menu_item != null);
@@ -348,8 +362,25 @@ class Instance : Object {
     static void tab_added_callback(Gedit.Window window, Gedit.Tab tab, Instance instance) {
         Gedit.Document document = tab.get_document();
         Signal.connect(document, "saved", (Callback) all_save_callback, instance);
+
+        // Hook up this particular tab's view with tooltips
+        Gedit.View tab_view = tab.get_view();
+        Signal.connect(tab_view, "key-press-event", (Callback) key_press_callback, instance);
+        
+        Gtk.Widget widget = tab_view.get_parent();
+        Gtk.ScrolledWindow scrolled_window = widget as Gtk.ScrolledWindow;
+        assert(scrolled_window != null);
+        
+        Gtk.Adjustment vert_adjust = scrolled_window.get_vadjustment();
+        Signal.connect(vert_adjust, "value-changed", (Callback) scrolled_callback, instance);
+
+        Signal.connect_after(document, "insert-text", (Callback) redisplay_tooltip_callback, instance);
+        Signal.connect(tab_view, "key-release-event", 
+                       (Callback) hide_tooltip_on_text_delete_callback, instance);
+        Signal.connect(tab_view, "focus-out-event", (Callback) focus_off_view_callback, instance);
+        Signal.connect(tab_view, "button-press-event", (Callback) button_press_callback, instance);
     }
-    
+
     static void tab_removed_callback(Gedit.Window window, Gedit.Tab tab, Instance instance) {
         Gedit.Document document = tab.get_document();
 
@@ -360,6 +391,56 @@ class Instance : Object {
             if (path != null)
                 Program.update_any(path, null);
         }
+    }
+    
+    static void scrolled_callback(Gtk.Adjustment adjust, Instance instance) {
+        instance.tip.hide();
+    }
+
+    static bool key_press_callback(Gedit.View view, Gdk.EventKey key, Instance instance) {
+        bool handled;
+        
+        switch(key.keyval) {
+            case 0xff1b: // escape
+                instance.tip.hide();
+                handled = true;
+                break;
+            default:
+                handled = false;
+                break;
+        }
+        return handled;
+    }
+    
+    static bool focus_off_view_callback(Gedit.View view, Gdk.EventFocus focus, Instance instance) {
+        instance.tip.hide();    
+        // Let other handlers catch this event as well
+        return false;
+    }
+
+    static void redisplay_tooltip_callback(Gedit.Document doc, Gtk.TextIter iter, string text,
+                                           int length, Instance instance) {
+        if (instance.tip.is_visible()) {
+            if (text == ")" || text == "(") {
+                instance.tip.hide();
+                instance.on_display_tooltip();
+            } 
+        } 
+    }
+
+    static void hide_tooltip_on_text_delete_callback(Gedit.View view, Gdk.EventKey key,
+                                                     Instance instance) {
+        if (instance.tip.is_visible()) {
+            string line = instance.tip.get_method_line();
+            if (!line.contains(instance.tip.get_method_name() + "("))
+                instance.tip.hide(); 
+        }
+    }
+
+    static bool button_press_callback(Gedit.View view, Gdk.EventButton event, Instance instance) {
+        instance.tip.hide();   
+        // Let other handlers catch this event as well
+        return false;
     }
 
     // TODO: Merge this method with saved_callback, below.
@@ -671,14 +752,10 @@ class Instance : Object {
 
         return true;
     }
-
-    void on_go_to_definition() {
-        Gedit.Document document = window.get_active_document();
-        string filename = document_filename(document);
-        if (filename == null)
-            return;
+    
+    void get_buffer_str_and_pos(string filename, out weak string source, out int pos) {
         Program program = Program.find_containing(filename);
-
+        
         // Reparse any modified documents in this program.
         foreach (Gedit.Document d in Gedit.App.get_default().get_documents())
             if (d.get_modified()) {
@@ -687,18 +764,35 @@ class Instance : Object {
                     program.update(path, buffer_contents(d));
             }
         
-        weak string source = buffer_contents(document);
+        Gedit.Document document = window.get_active_document();
+        source = buffer_contents(document);
         Gtk.TextIter insert = get_insert_iter(document);
-        int pos = insert.get_offset();
-        CompoundName name = new Parser().name_at(source, pos);
+        pos = insert.get_offset();
+    }
+
+    void on_go_to_definition() {
+        string? filename = active_filename();
+        if (filename == null)
+            return;
+
+        weak string source;
+        int pos;
+        get_buffer_str_and_pos(filename, out source, out pos);
+
+        CompoundName name = new Parser().name_at(source, pos); 
         if (name == null)
             return;
+     
+        Program program = Program.find_containing(filename);
+        program.parse_system_vapi_files();
         
         SourceFile sf = program.find_source(filename);
-        Symbol sym = sf.resolve(name, pos);
+        Symbol? sym = sf.resolve(name, pos);
         if (sym == null)
             return;
 
+        Gedit.Document document = window.get_active_document();
+        Gtk.TextIter insert = get_insert_iter(document);
         Gtk.TextMark mark = document.create_mark(null, insert, false);
         history.add(mark);
         if (history.size > MAX_HISTORY)
@@ -874,7 +968,7 @@ class Instance : Object {
     void on_run() {
         if (active_filename() == null || child_process_running)
             return;
-            
+
         string filename = get_active_document_filename();
         Program.rescan_build_root(filename);
         
@@ -904,8 +998,7 @@ class Instance : Object {
             show_error_dialog("There was a problem running \"" + binary_path + "\"");
             return;
         }
-        
-        // Show the run pane always
+
         run_terminal.reset(true, true);
         run_pane.show();
         Gedit.Panel panel = window.get_bottom_panel();
@@ -916,8 +1009,42 @@ class Instance : Object {
     }
 
     void on_run_child_exit() {
-        run_terminal.feed("The program exited.\r\n", -1);
+        run_terminal.feed("\r\nThe program exited.\r\n", -1);
         child_process_running = false;
+    }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                         Tooltip display                                        //
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    void on_display_tooltip() {
+        string? filename = active_filename();
+        if (filename == null)
+            return;
+
+        weak string source;
+        int pos;
+        get_buffer_str_and_pos(filename, out source, out pos);
+    
+        int method_pos;
+        CompoundName name = new Parser().method_at(source, pos, out method_pos); 
+        if (name == null)
+            return;
+        
+        Program program = Program.find_containing(filename);
+        program.parse_system_vapi_files();
+        
+        SourceFile sf = program.find_source(filename);
+        Symbol? sym = sf.resolve(name, pos);
+        if (sym == null)
+            return;
+        
+        Method method = sym as Method; 
+        
+        if (method == null)
+            return;
+
+        tip.show(name.to_string(), " " + method.to_string() + " ", method_pos);
     }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -928,7 +1055,7 @@ class Instance : Object {
         Program program = get_active_document_program();
         return program.error_list != null && program.error_list.errors.size != 0;
     }
-    
+
     bool program_exists_for_active_document() {
         string filename = active_filename();
         return Program.null_find_containing(filename) != null;
@@ -939,18 +1066,18 @@ class Instance : Object {
         go_to_definition_menu_item.set_sensitive(definition_item_sensitive);
         go_back_menu_item.set_sensitive(can_go_back());
 
-        // Make sure the program for the file exists first, otherwise disable the run button
-        bool activate_error_search = program_exists_for_active_document() &&
-                                     active_filename() != null && errors_exist();
-            
+        bool activate_error_search = active_filename() != null && 
+                                     program_exists_for_active_document() && errors_exist();
+
         next_error_menu_item.set_sensitive(activate_error_search);
         prev_error_menu_item.set_sensitive(activate_error_search);
     }
-    
+
     void on_project_menu_activated() {
         bool active_file_not_null = active_filename() != null;
         build_menu_item.set_sensitive(active_file_not_null);
-        
+
+        // Make sure the program for the file exists first, otherwise disable the run button        
         if (active_file_not_null && program_exists_for_active_document()) {
             Program program = get_active_document_program();
             program.reparse_makefile();

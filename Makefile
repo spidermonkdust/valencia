@@ -3,8 +3,8 @@ VERSION = 0.1.0
 
 VALAC = valac
 
-SOURCES = parser.vala program.vala scanner.vala valencia.vala util.vala
-LIBS = --pkg gee-1.0 --pkg gedit-2.20 --pkg vte
+SOURCES = util.vala parser.vala program.vala scanner.vala valencia.vala
+LIBS = --pkg vala-1.0 --pkg gedit-2.20 --pkg vte
 
 DIST_FILES = $(SOURCES) \
              Makefile \

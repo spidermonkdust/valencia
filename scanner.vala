@@ -22,7 +22,7 @@ enum Token {
     // keywords
     ABSTRACT, CLASS, CONST, CONSTRUCT, DELEGATE, ENUM, EXTERN, FOREACH, INLINE, INTERFACE,
     NAMESPACE, NEW, OUT, OVERRIDE, OWNED, PRIVATE, PROTECTED, PUBLIC, REF, RETURN, SIGNAL, STATIC,
-    STRUCT, UNOWNED, USING, VIRTUAL, WEAK
+    STRUCT, THIS, UNOWNED, USING, VIRTUAL, WEAK
 }
 
 struct Keyword {
@@ -54,6 +54,7 @@ const Keyword[] keywords = {
     { "signal", Token.SIGNAL },
     { "static", Token.STATIC },
     { "struct", Token.STRUCT },
+    { "this", Token.THIS },
     { "unowned", Token.UNOWNED },
     { "using", Token.USING },
     { "virtual", Token.VIRTUAL },
@@ -118,14 +119,14 @@ class Scanner : Object {
         }
         return p == input && *q == 0;
     }
-    
+
     // Read characters until we reach a triple quote (""") string terminator.
     void read_triple_string() {
         while (input != "")
             if (next_char() == '"' && accept('"') && accept('"'))
                 return;
     }
-    
+
     Token read_token() {
         while (input != "") {
             token_start_char = input;
@@ -151,6 +152,8 @@ class Scanner : Object {
                     if (d == '/') {    // single-line comment
                         while (input != "" && next_char() != '\n')
                             ;
+                        token_start_char = input;
+                        token_start = input_pos;
                         continue;
                     }
                     if (d == '*') {       // multi-line comment
@@ -161,6 +164,8 @@ class Scanner : Object {
                                 break;
                             }
                         }
+                        token_start_char = input;
+                        token_start = input_pos;
                         continue;
                     }
                     return Token.CHAR;
@@ -217,7 +222,7 @@ class Scanner : Object {
         return token;
     }
     
-    public Token next_token() {
+    public Token next_token() { 
         Token t = peek_token();
         token = Token.NONE;
         start_char = token_start_char;
@@ -226,13 +231,24 @@ class Scanner : Object {
         end = input_pos;
         return t;
     }
-    
+
     public bool eof() { return peek_token() == Token.EOF; }
 
     // Return the source text of the last token retrieved.
     public string val() {
         size_t bytes = (char *) end_char - (char *) start_char;
         return start_char.ndup(bytes);
-    } 
+    }
+
+    public weak string get_start() {
+        return start_char;
+    }
+
+    public weak string get_start_after_comments() {
+        // Skip any comments after the end character and take the first character after them
+        peek_token();
+        return token_start_char;
+    }
+
 }
 
