@@ -373,9 +373,17 @@ class Parser : Object {
         
         if (accept(Token.PERIOD))
             return parse_containing_namespace(name, is_enum);
-        
+
         Class cl = new Class(name, source);
         cl.start = scanner.start;
+        
+        // Make sure to discard any generic qualifiers
+        if (accept(Token.LESS_THAN)) {
+            while (accept(Token.ID) || accept(Token.COMMA))
+                ;
+            accept(Token.GREATER_THAN);
+        }
+
         if (accept(Token.COLON))
             while (true) {
                 CompoundName type = parse_type();
