@@ -285,6 +285,7 @@ class Parser : Object {
             case Token.DELEGATE:
             case Token.EXTERN:
             case Token.INLINE:
+            case Token.INTERNAL:
             case Token.NEW:
             case Token.OVERRIDE:
             case Token.PRIVATE:
