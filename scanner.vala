@@ -141,9 +141,12 @@ class Scanner : Object {
                         break;
                     advance();
                 }
-                foreach (Keyword k in keywords)
-                    if (match(k.name))
-                        return k.token;
+                // We don't use the foreach statement to iterate over the keywords array;
+                // that would copy the Keyword structure (and the string it contains) on
+                // each iteration, which would be slow.
+                for (int i = 0 ; i < keywords.length ; ++i)
+                    if (match(keywords[i].name))
+                        return keywords[i].token;
                 return Token.ID;
             }
             switch (c) {
