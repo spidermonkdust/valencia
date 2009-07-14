@@ -180,6 +180,7 @@ class Instance : Object {
     Gtk.ActionGroup action_group;
     Gtk.MenuItem go_to_definition_menu_item;
     Gtk.MenuItem go_back_menu_item;
+    Gtk.MenuItem go_forward_menu_item;
     Gtk.MenuItem next_error_menu_item;
     Gtk.MenuItem prev_error_menu_item;
     Gtk.MenuItem build_menu_item;
@@ -190,7 +191,7 @@ class Instance : Object {
     
     int saving;
     bool child_process_running;
-    
+
     // Output pane
     Gtk.TextTag error_tag;
     Gtk.TextTag italic_tag;
@@ -200,7 +201,11 @@ class Instance : Object {
     Gtk.TextBuffer output_buffer;
     Gtk.TextView output_view;
     Gtk.ScrolledWindow output_pane;
-    
+
+    // Parsing dialog
+    public delegate void parse_files_update_callback(double percentage);
+    ProgressBarDialog parsing_dialog;
+
     // Run command
     Gtk.ScrolledWindow run_pane;
     Vte.Terminal run_terminal;
@@ -210,9 +215,13 @@ class Instance : Object {
     string target_filename;
     Destination destination;
 
+    // Jump to definition history
     static ArrayList<Gtk.TextMark> history;
     const int MAX_HISTORY = 10;
+    int history_index;
+    bool browsing_history;
 
+    // Tooltips
     Tooltip tip;
     
     const Gtk.ActionEntry[] entries = {
@@ -220,6 +229,8 @@ class Instance : Object {
           "Jump to a symbol's definition", on_go_to_definition },
         { "SearchGoBack", Gtk.STOCK_GO_BACK, "Go _Back", "<alt>Left",
           "Go back after jumping to a definition", on_go_back },
+        { "SearchGoForward", Gtk.STOCK_GO_FORWARD, "Go F_orward", "<alt>Right",
+          "Go forward to a definition after jumping backwards", on_go_forward },
         { "SearchNextError", null, "_Next Error", "<ctrl><alt>n",
           "Go to the next compiler error in the ouput and view panes", on_next_error },
         { "SearchPrevError", null, "_Previous Error", "<ctrl><alt>p",
@@ -242,6 +253,7 @@ class Instance : Object {
               <placeholder name="SearchOps_8">
                 <menuitem name="SearchGoToDefinitionMenu" action="SearchGoToDefinition"/>
                 <menuitem name="SearchGoBackMenu" action="SearchGoBack"/>
+                <menuitem name="SearchGoForwardMenu" action="SearchGoForward"/>
                 <separator/>
                 <menuitem name="SearchNextErrorMenu" action="SearchNextError"/>
                 <menuitem name="SearchPrevErrorMenu" action="SearchPrevError"/>
@@ -332,6 +344,10 @@ class Instance : Object {
         go_back_menu_item = (Gtk.MenuItem) manager.get_widget(
             "/MenuBar/SearchMenu/SearchOps_8/SearchGoBackMenu");
         assert(go_back_menu_item != null);
+        
+        go_forward_menu_item = (Gtk.MenuItem) manager.get_widget(
+            "/MenuBar/SearchMenu/SearchOps_8/SearchGoForwardMenu");
+        assert(go_forward_menu_item != null);
 
         next_error_menu_item = (Gtk.MenuItem) manager.get_widget(
             "/MenuBar/SearchMenu/SearchOps_8/SearchNextErrorMenu");
@@ -701,8 +717,7 @@ class Instance : Object {
         buffer.apply_tag(tag, start, end);
     }
 
-    void jump_to_document_error(Gtk.TextIter iter, ErrorInfo info, string cur_top_directory) {
-        string filename = Path.build_filename(cur_top_directory, info.filename);
+    void jump_to_document_error(Gtk.TextIter iter, ErrorInfo info, Program program) {
         int line_number = info.start_line.to_int();
         Destination dest;
         if (info.start_char == null)
@@ -710,10 +725,174 @@ class Instance : Object {
         else
             dest = new LineCharRange(line_number - 1, info.start_char.to_int() - 1,
                                      info.end_line.to_int() - 1, info.end_char.to_int());
-        
-        jump(filename, dest);
+
+        if (Path.is_absolute(info.filename)) {
+            jump(info.filename, dest);
+        } else {
+            string filename = program.get_path_for_filename(info.filename);
+             if (filename == null)
+                return;
+            jump(filename, dest);
+        }
+    }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                     Jump to definition                                         //
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    void add_mark_at_insert_to_history() {
+        Gedit.Document doc = window.get_active_document();
+        Gtk.TextIter insert = get_insert_iter(doc);
+            
+        // Don't add a mark to history if the most recent mark is on the same line
+        if (history.size > 0) {
+            Gtk.TextMark old_mark = history.get(history.size - 1);
+            Gedit.Document old_doc = (Gedit.Document) old_mark.get_buffer();
+  
+            if (old_doc == doc) {
+                Gtk.TextIter old_iter;
+                old_doc.get_iter_at_mark(out old_iter, old_mark);
+                if (old_iter.get_line() == insert.get_line())
+                    return;
+            }
+        }
+
+        Gtk.TextMark mark = doc.create_mark(null, insert, false);
+        history.add(mark);
+        if (history.size > MAX_HISTORY)
+            history.remove_at(0);
+        history_index = history.size; // always set the current index to be at the top
     }
     
+    void get_buffer_str_and_pos(string filename, out weak string source, out int pos) {
+        Program program = Program.find_containing(filename);
+        program.parse_system_vapi_files();
+
+        // Reparse any modified documents in this program.
+        foreach (Gedit.Document d in Gedit.App.get_default().get_documents())
+            if (d.get_modified()) {
+                string path = document_filename(d);
+                if (path != null)
+                    program.update(path, buffer_contents(d));
+            }
+        
+        Gedit.Document document = window.get_active_document();
+        source = buffer_contents(document);
+        Gtk.TextIter insert = get_insert_iter(document);
+        pos = insert.get_offset();
+    }
+
+    void on_go_to_definition() {
+        string? filename = active_filename();
+        if (filename == null)
+            return;
+
+        Program program = Program.find_containing(filename);
+        program.parse_system_vapi_files();
+        
+        if (program.is_parsing()) {
+            program.parsed_file += update_parse_dialog;
+            program.system_parse_complete += jump_to_symbol_definition;
+        }
+        else {
+            jump_to_symbol_definition();
+        }
+    }
+
+    void jump_to_symbol_definition() {
+        string? filename = active_filename();
+        if (filename == null)
+            return;
+            
+        weak string source;
+        int pos;
+        get_buffer_str_and_pos(filename, out source, out pos);
+
+        CompoundName name = new Parser().name_at(source, pos); 
+        if (name == null)
+            return;
+
+        Program program = Program.find_containing(filename);
+        SourceFile sf = program.find_source(filename);
+        Symbol? sym = sf.resolve(name, pos);
+        if (sym == null)
+            return;
+
+        // Make sure the current index is the last element
+        while (history.size > 0 && history.size > history_index)
+            history.remove_at(history.size - 1);
+
+        add_mark_at_insert_to_history();
+        browsing_history = false;
+
+        SourceFile dest = sym.source;
+        jump(dest.filename, new CharRange(sym.start, sym.start + (int) sym.name.length));
+    }
+
+    void on_go_back() {
+        if (history.size == 0)
+            return;
+
+        // Preserve place in history
+        if (history_index == history.size && !browsing_history) {
+            add_mark_at_insert_to_history();
+            browsing_history = true;
+        }
+        
+        if (history_index <= 1)
+            return;
+
+        --history_index;
+        scroll_to_history_index();
+    }
+    
+    void on_go_forward() {
+        if (history.size == 0 || history_index >= history.size)
+            return;
+
+        ++history_index;
+        scroll_to_history_index();
+    }
+
+    void scroll_to_history_index() {
+        Gtk.TextMark mark = history.get(history_index - 1);
+        assert(!mark.get_deleted());
+        
+        Gedit.Document buffer = (Gedit.Document) mark.get_buffer();
+        Gtk.TextIter iter;
+        buffer.get_iter_at_mark(out iter, mark);
+        buffer.place_cursor(iter);
+        
+        Gedit.Tab tab = Gedit.Tab.get_from_document(buffer);
+        Gedit.Window window = (Gedit.Window) tab.get_toplevel();
+        window.set_active_tab(tab);
+        window.present();
+
+        scroll_tab_to_iter(tab, iter);
+    }
+
+    bool can_go_back() {
+        if (history.size == 0 || history_index <= 1)
+            return false;
+
+        // -2 because history_index is not 0-based (it is 1-based), and we need the previous element
+        Gtk.TextMark mark = history.get(history_index - 2);
+
+        return !mark.get_deleted();
+    }
+
+    bool can_go_forward() {
+        if (history.size == 0 || history_index >= history.size)
+            return false;
+
+        Gtk.TextMark mark = history.get(history_index);
+        return !mark.get_deleted();
+    }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                       Jump to error                                            //
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
     void update_error_history_index(ErrorList program_errors, ErrorInfo info) {
         program_errors.error_index = -1;
         foreach (ErrorPair pair in program_errors.errors) {
@@ -747,98 +926,10 @@ class Instance : Object {
         
         // It is last_program_to_build because the output window being clicked on is obviously
         // from this same instance, which means the last program output to this instance's buffer
-        jump_to_document_error(iter, info, last_program_to_build.get_top_directory());
+        jump_to_document_error(iter, info, last_program_to_build);
         update_error_history_index(last_program_to_build.error_list, info);
 
         return true;
-    }
-    
-    void get_buffer_str_and_pos(string filename, out weak string source, out int pos) {
-        Program program = Program.find_containing(filename);
-        
-        // Reparse any modified documents in this program.
-        foreach (Gedit.Document d in Gedit.App.get_default().get_documents())
-            if (d.get_modified()) {
-                string path = document_filename(d);
-                if (path != null)
-                    program.update(path, buffer_contents(d));
-            }
-        
-        Gedit.Document document = window.get_active_document();
-        source = buffer_contents(document);
-        Gtk.TextIter insert = get_insert_iter(document);
-        pos = insert.get_offset();
-    }
-
-    void on_go_to_definition() {
-        string? filename = active_filename();
-        if (filename == null)
-            return;
-
-        weak string source;
-        int pos;
-        get_buffer_str_and_pos(filename, out source, out pos);
-
-        CompoundName name = new Parser().name_at(source, pos); 
-        if (name == null)
-            return;
-     
-        Program program = Program.find_containing(filename);
-        program.parse_system_vapi_files();
-        
-        SourceFile sf = program.find_source(filename);
-        Symbol? sym = sf.resolve(name, pos);
-        if (sym == null)
-            return;
-
-        Gedit.Document document = window.get_active_document();
-        Gtk.TextIter insert = get_insert_iter(document);
-        Gtk.TextMark mark = document.create_mark(null, insert, false);
-        history.add(mark);
-        if (history.size > MAX_HISTORY)
-            history.remove_at(0);
-
-        SourceFile dest = sym.source;
-        jump(dest.filename, new CharRange(sym.start, sym.start + (int) sym.name.length));
-    }
-
-    void move_output_mark_into_focus(Gtk.TextMark mark) {
-        Gtk.TextBuffer output = mark.get_buffer();
-        Gtk.TextIter iter;
-        output.get_iter_at_mark(out iter, mark);
-        output_view.scroll_to_iter(iter, 0.25, true, 0.0, 0.0);
-        
-        show_output_pane();
-        tag_text_buffer_line(output_buffer, highlight_tag, iter);
-    }
-
-    void on_go_back() {
-        if (history.size == 0)
-            return;
-
-        Gtk.TextMark mark = history.get(history.size - 1);
-        history.remove_at(history.size - 1);
-        assert(!mark.get_deleted());
-
-        Gedit.Document buffer = (Gedit.Document) mark.get_buffer();
-        Gtk.TextIter iter;
-        buffer.get_iter_at_mark(out iter, mark);
-        buffer.delete_mark(mark);
-        buffer.place_cursor(iter);
-        
-        Gedit.Tab tab = Gedit.Tab.get_from_document(buffer);
-        Gedit.Window window = (Gedit.Window) tab.get_toplevel();
-        window.set_active_tab(tab);
-        window.present();
-        
-        scroll_tab_to_iter(tab, iter);
-    }
-
-    bool can_go_back() {
-        if (history.size == 0)
-            return false;
-        Gtk.TextMark mark = history.get(history.size - 1);
-        return !mark.get_deleted();
     }
 
     string active_filename() {
@@ -905,6 +996,16 @@ class Instance : Object {
         
         return null;
     }
+    
+    void move_output_mark_into_focus(Gtk.TextMark mark) {
+        Gtk.TextBuffer output = mark.get_buffer();
+        Gtk.TextIter iter;
+        output.get_iter_at_mark(out iter, mark);
+        output_view.scroll_to_iter(iter, 0.25, true, 0.0, 0.0);
+        
+        show_output_pane();
+        tag_text_buffer_line(output_buffer, highlight_tag, iter);
+    }
 
     void move_to_error(Program program) {
         ErrorPair pair = program.error_list.errors[program.error_list.error_index];
@@ -917,7 +1018,7 @@ class Instance : Object {
         if (target == null)
             return;
 
-        jump_to_document_error(doc_iter, pair.error_info, program.get_top_directory());
+        jump_to_document_error(doc_iter, pair.error_info, program);
         target.move_output_mark_into_focus(pair.build_pane_error);
     }
     
@@ -1014,6 +1115,30 @@ class Instance : Object {
     }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                         Status bar update                                      //
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    void update_parse_dialog(double percentage) {
+        if (window == null) {
+            parsing_dialog.close();
+            return;
+        }
+    
+        if (percentage == 1.0) {
+            if (parsing_dialog != null) {
+                parsing_dialog.close();
+                parsing_dialog = null;
+            }
+            return;
+        }
+
+        if (parsing_dialog == null)
+            parsing_dialog = new ProgressBarDialog(window, "Parsing Vala files");
+            
+        parsing_dialog.set_percentage(percentage);
+    }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                         Tooltip display                                        //
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1021,19 +1146,33 @@ class Instance : Object {
         string? filename = active_filename();
         if (filename == null)
             return;
-
-        weak string source;
-        int pos;
-        get_buffer_str_and_pos(filename, out source, out pos);
-    
-        int method_pos;
-        CompoundName name = new Parser().method_at(source, pos, out method_pos); 
-        if (name == null)
-            return;
         
         Program program = Program.find_containing(filename);
         program.parse_system_vapi_files();
         
+        if (program.is_parsing()) {
+            program.parsed_file += update_parse_dialog;
+            program.system_parse_complete += display_tooltip;
+        }
+        else
+            display_tooltip();
+    }
+    
+    void display_tooltip() {
+        string? filename = active_filename();
+        if (filename == null)
+            return;
+
+        weak string source;
+        int pos;
+        get_buffer_str_and_pos(filename, out source, out pos);
+
+        int method_pos;
+        CompoundName name = new Parser().method_at(source, pos, out method_pos);
+        if (name == null)
+            return;
+
+        Program program = Program.find_containing(filename);
         SourceFile sf = program.find_source(filename);
         Symbol? sym = sf.resolve(name, pos);
         if (sym == null)
@@ -1065,6 +1204,7 @@ class Instance : Object {
         bool definition_item_sensitive = active_document_is_valid_vala_file();
         go_to_definition_menu_item.set_sensitive(definition_item_sensitive);
         go_back_menu_item.set_sensitive(can_go_back());
+        go_forward_menu_item.set_sensitive(can_go_forward());
 
         bool activate_error_search = active_filename() != null && 
                                      program_exists_for_active_document() && errors_exist();

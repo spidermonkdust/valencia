@@ -596,6 +596,12 @@ class Program : Object {
     public ErrorList error_list;
 
     string top_directory;
+    
+    int total_filesize;
+    int parse_list_index;
+    ArrayList<string> sourcefile_paths = new ArrayList<string>();
+    bool parsing;
+    
     ArrayList<SourceFile> sources = new ArrayList<SourceFile>();
     static ArrayList<SourceFile> system_sources = new ArrayList<SourceFile>();
     
@@ -604,10 +610,15 @@ class Program : Object {
     Makefile makefile;
 
     bool recursive_project;
+    
+    signal void local_parse_complete();
+    public signal void system_parse_complete();
+    public signal void parsed_file(double fractional_progress);
 
     Program(string directory) {
         error_list = null;
         top_directory = null;
+        parsing = true;
         makefile = new Makefile();
         
         // Search for the program's makefile; if the top_directory still hasn't been modified
@@ -621,8 +632,8 @@ class Program : Object {
             top_directory = directory;
             recursive_project = false;
         }
-        
-        scan_directory_for_sources(top_directory, sources, recursive_project);
+
+        GLib.Idle.add(parse_local_vala_files_idle_callback);
         
         programs.add(this);
     }
@@ -681,48 +692,114 @@ class Program : Object {
         makefile.path = makefile_file.get_path();
         top_directory = Path.get_dirname(makefile.path);
     }
-    
-    // Adds vala files in the directory to the program, as well as parses them
-    void scan_directory_for_sources(string directory, ArrayList<SourceFile> source_list, 
-                                    bool recursive) {
+
+    bool parse_local_vala_files_idle_callback() {
+        if (sourcefile_paths.size == 0)
+            cache_source_paths_in_directory(top_directory, recursive_project);
+            
+        if (parse_vala_file(sources))
+            return true;
+        else {
+            parsing = false;
+            local_parse_complete();
+            return false;
+        }
+    }
+
+    bool parse_system_vala_files_idle_callback() {
+        if (sourcefile_paths.size == 0) {
+            // Sort of a hack to get the path to the system vapi file directory. Gedit may hang or 
+            // crash if the vala compiler .so is not present...
+            string[] null_dirs = {};
+            Vala.CodeContext context = new Vala.CodeContext();
+            string path = context.get_package_path("gobject-2.0", null_dirs);
+            string system_directory = Path.get_dirname(path);
+        
+            cache_source_paths_in_directory(system_directory, true);
+        }
+            
+        if (parse_vala_file(system_sources))
+            return true;
+        else {
+            parsing = false;
+            system_parse_complete();
+            return false;
+        }
+    }    
+
+    // Takes the next vala file in the sources path list and parses it. Returns true if there are
+    // more files to parse, false if there are not.
+    bool parse_vala_file(ArrayList<SourceFile> source_list) {
+        string path = sourcefile_paths.get(parse_list_index);
+
+        // The index is incremented here because if an error happens, we want to skip this file
+        // next time around
+        ++parse_list_index;        
+        
+        SourceFile source = new SourceFile(this, path);
+        string contents;
+        
+        try {
+            FileUtils.get_contents(path, out contents);
+        } catch (GLib.FileError e) {
+            // needs a message box? stderr.printf message?
+            return parse_list_index == sourcefile_paths.size;
+        }
+
+        Parser parser = new Parser();
+        parser.parse(source, contents);
+        source_list.add(source);
+        // Only show parsing progress if the filesize is over 1MB (1048576 bytes == 1 megabyte)
+        if (total_filesize > 1048576)
+            parsed_file((double) (parse_list_index) / sourcefile_paths.size);
+        
+        return parse_list_index != sourcefile_paths.size;
+    }
+
+    // returns the total size of the files
+    int cache_source_paths_in_directory(string directory, bool recursive) {
+        parse_list_index = 0;
+        
         Dir dir;
         try {
             dir = Dir.open(directory);
         } catch (GLib.FileError e) {
             GLib.warning("Error opening directory: %s\n", directory);
-            return;
+            return 0;
         }
         
-        Parser parser = new Parser();
+        total_filesize = 0;
+        
         while (true) {
             string file = dir.read_name();
-            // doesn't parse posix files to avoid built-in type vala profile conflicts (posix.vapi
-            // contains definitions for 'int', jumping to definition may open posix.vapi instead
-            // of glib.vapi)
+
             if (file == null)
                 break;
-                
-            if (file == "posix.vapi")
+
+            // doesn't parse posix files to avoid built-in type vala profile conflicts (posix.vapi
+            // contains definitions for 'int', jumping to definition may open posix.vapi instead
+            // of glib.vapi            
+            if (file == "posix.vapi") 
                 continue;
 
-             string path = Path.build_filename(directory, file);
+            string path = Path.build_filename(directory, file);
 
             if (is_vala(file)) {
-                SourceFile source = new SourceFile(this, path);
-                string contents;
+                sourcefile_paths.add(path);
                 
                 try {
-                    FileUtils.get_contents(path, out contents);
-                } catch (GLib.FileError e) {
-                    // needs a message box? stderr.printf message?
-                    return;
+                GLib.File sourcefile = GLib.File.new_for_path(path);
+                GLib.FileInfo info = sourcefile.query_info("standard::size", 
+                                                           GLib.FileQueryInfoFlags.NONE, null);
+                total_filesize += (int) info.get_size();
+                } catch (GLib.Error e) {
                 }
-                parser.parse(source, contents);
-                source_list.add(source);
-            } else if (recursive && GLib.FileUtils.test(path, GLib.FileTest.IS_DIR)) {
-                scan_directory_for_sources(path, source_list, true);
             }
+            else if (recursive && GLib.FileUtils.test(path, GLib.FileTest.IS_DIR))
+                total_filesize += cache_source_paths_in_directory(path, true);
         }
+        
+        return total_filesize;
     }
     
     public static bool is_vala(string filename) {
@@ -754,9 +831,10 @@ class Program : Object {
     }    
 
     public SourceFile? find_source(string path) {
-        foreach (SourceFile source in sources)
+        foreach (SourceFile source in sources) {
             if (source.filename == path)
                 return source;
+        }
         return null;
     }
     
@@ -800,7 +878,8 @@ class Program : Object {
     public static Program find_containing(string path) {
         string dir = Path.get_dirname(path);
         Program p = find_program(dir);
-        return p != null ? p : new Program(dir);
+        
+        return (p != null) ? p : new Program(dir);
     }
     
     public static Program? null_find_containing(string? path) {
@@ -839,7 +918,7 @@ class Program : Object {
                     program.update1(path, contents);
         }
     }
-    
+
     public static void rescan_build_root(string sourcefile_path) {
         Program? program = find_program(Path.get_dirname(sourcefile_path));
         
@@ -898,24 +977,64 @@ class Program : Object {
     public void reparse_makefile() {
         makefile.reparse();
     }
-    
+
+    // Tries to find a full path for a filename that may be a sourcefile (or another file that
+    // happens to reside in a sourcefile directory, like a generated .c file)
+    public string? get_path_for_filename(string filename) {
+        string basename = Path.get_basename(filename);
+        foreach (SourceFile sf in sources) {
+            if (basename == Path.get_basename(sf.filename))
+                return sf.filename;
+        }
+
+        // If no direct match could be made, try searching all directories that the source files
+        // are in for a file that matches the basename
+        Gee.ArrayList<string> dirs = new ArrayList<string>();
+        foreach (SourceFile sf in sources) {
+            string dir = Path.get_dirname(sf.filename);
+            if (!dirs.contains(dir))
+                dirs.add(dir);
+        }
+        foreach (string dir_str in dirs) {
+            Dir directory;
+            try {
+                directory = Dir.open(dir_str);
+            } catch (GLib.FileError e) {
+                GLib.warning("Could not open %s for reading.\n", dir_str);
+                return null;
+            }
+            string file = directory.read_name();
+            while(file != null) {
+                if (basename == file)
+                    return Path.build_filename(dir_str, file);
+                file = directory.read_name();
+            }
+        }
+        
+        return null;
+    }
+
     public void parse_system_vapi_files() {
         // Don't parse system vapi files twice
         if (system_sources.size > 0)
             return;
-            
-        string[] null_dirs = {};
-        
-        // Sort of a hack to get the path to the system vapi file directory. Gedit may hang or 
-        // crash if the vala compiler .so is not present...
-        Vala.CodeContext context = new Vala.CodeContext();
-        string path = context.get_package_path("gobject-2.0", null_dirs);
-        string directory = Path.get_dirname(path);
-    
-        // If the user is operating from the system vapi directory, don't reparse all the files    
-        if (directory != top_directory)
-            scan_directory_for_sources(directory, system_sources, true);
+
+        // Only begin parsing vapi files after the local vapi files have been parsed        
+        if (is_parsing()) {
+            local_parse_complete += parse_system_vapi_files;
+        } else {
+            parsing = true;
+            parse_list_index = 0;
+            sourcefile_paths.clear();
+            GLib.Idle.add(this.parse_system_vala_files_idle_callback);
+        }
+    }
+
+    public bool is_parsing() {
+        return parsing;
     }
     
 }
+
+
 

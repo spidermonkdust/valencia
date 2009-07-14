@@ -46,7 +46,7 @@ class Parser : Object {
                         return;
                     break;
             }
-   }
+    }
 
     CompoundName? parse_type() {
         accept(Token.UNOWNED) || accept(Token.WEAK);

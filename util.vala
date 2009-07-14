@@ -166,4 +166,40 @@ class Tooltip {
     }
 }
 
+class ProgressBarDialog : Gtk.Window {
+    Gtk.ProgressBar bar;
+
+    public ProgressBarDialog(Gtk.Window parent_win, string text) {
+        bar = new Gtk.ProgressBar();
+        Gtk.VBox vbox = new Gtk.VBox(true, 0);
+        Gtk.HBox hbox = new Gtk.HBox(true, 0);
+
+        bar.set_text(text);
+        bar.set_size_request(226, 25);
+        set_size_request(250, 49);
+
+        vbox.pack_start(bar, true, false, 0);
+        hbox.pack_start(vbox, true, false, 0);   
+        add(hbox);
+        set_title(text);
+
+        set_resizable(false);
+        set_transient_for(parent_win);
+        set_modal(true);
+        show_all();
+    }
+    
+    public void set_percentage(double percent) {
+        bar.set_fraction(percent);
+
+        show();
+        bar.queue_draw();        
+        this.queue_draw();
+        this.window.process_updates(true);
+    }
+    
+    public void close() {
+        hide();
+    }
+}
 
