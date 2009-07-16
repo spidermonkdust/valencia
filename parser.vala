@@ -526,7 +526,7 @@ class Parser : Object {
     public CompoundName? method_at(string input, int pos, out int final_pos) {
         Stack<Pair<int, CompoundName>> stack = new Stack<Pair<int, CompoundName>>();
         int free_left_parens = 0;
-        
+
         scanner = new Scanner(input);
         while (scanner.end < pos) {
             Token t = scanner.next_token();
@@ -534,7 +534,7 @@ class Parser : Object {
                 break;
             } else if (t == Token.RIGHT_PAREN) {
                 // Try to match parentheses
-                if (stack.size() > 0) {
+                if (stack.size() > 0 && free_left_parens == 0) {
                     stack.pop();
                 } else --free_left_parens;
             } else if (t == Token.LEFT_PAREN) {
