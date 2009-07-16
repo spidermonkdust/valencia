@@ -693,28 +693,47 @@ class Program : Object {
         top_directory = Path.get_dirname(makefile.path);
     }
 
+    string get_system_vapi_directory() {
+        // Sort of a hack to get the path to the system vapi file directory. Gedit may hang or 
+        // crash if the vala compiler .so is not present...
+        string[] null_dirs = {};
+        Vala.CodeContext context = new Vala.CodeContext();
+        string path = context.get_package_path("gobject-2.0", null_dirs);
+        return Path.get_dirname(path);
+    }
+    
+    void finish_local_parse() {
+        parsing = false;
+        local_parse_complete();
+        // Emit this now, otherwise it will never be emitted, since the system parsing is done
+        if (system_sources.size > 0)
+            system_parse_complete();
+    }
+
     bool parse_local_vala_files_idle_callback() {
-        if (sourcefile_paths.size == 0)
+        if (sourcefile_paths.size == 0) {
+            // Don't parse system files locally!
+            string system_directory = get_system_vapi_directory();
+            if (top_directory == system_directory || 
+                (recursive_project && dir_has_parent(system_directory, top_directory))) {
+                finish_local_parse();
+                return false;
+            }
+            
             cache_source_paths_in_directory(top_directory, recursive_project);
+        }
             
         if (parse_vala_file(sources))
             return true;
         else {
-            parsing = false;
-            local_parse_complete();
+            finish_local_parse();
             return false;
         }
     }
 
     bool parse_system_vala_files_idle_callback() {
         if (sourcefile_paths.size == 0) {
-            // Sort of a hack to get the path to the system vapi file directory. Gedit may hang or 
-            // crash if the vala compiler .so is not present...
-            string[] null_dirs = {};
-            Vala.CodeContext context = new Vala.CodeContext();
-            string path = context.get_package_path("gobject-2.0", null_dirs);
-            string system_directory = Path.get_dirname(path);
-        
+            string system_directory = get_system_vapi_directory();
             cache_source_paths_in_directory(system_directory, true);
         }
             
@@ -725,7 +744,7 @@ class Program : Object {
             system_parse_complete();
             return false;
         }
-    }    
+    }
 
     // Takes the next vala file in the sources path list and parses it. Returns true if there are
     // more files to parse, false if there are not.
@@ -802,6 +821,22 @@ class Program : Object {
         return total_filesize;
     }
     
+    void parse_system_vapi_files() {
+        // Don't parse system vapi files twice
+        if (system_sources.size > 0)
+            return;
+
+        // Only begin parsing vapi files after the local vapi files have been parsed        
+        if (is_parsing()) {
+            local_parse_complete += parse_system_vapi_files;
+        } else {
+            parsing = true;
+            parse_list_index = 0;
+            sourcefile_paths.clear();
+            GLib.Idle.add(this.parse_system_vala_files_idle_callback);
+        }
+    }
+    
     public static bool is_vala(string filename) {
         return filename.has_suffix(".vala") ||
                filename.has_suffix(".vapi") ||
@@ -830,12 +865,20 @@ class Program : Object {
         return s;
     }    
 
-    public SourceFile? find_source(string path) {
-        foreach (SourceFile source in sources) {
+    SourceFile? find_source1(string path, ArrayList<SourceFile> source_list) {
+        foreach (SourceFile source in source_list) {
             if (source.filename == path)
                 return source;
         }
         return null;
+    }
+
+    public SourceFile? find_source(string path) {
+        SourceFile sf = find_source1(path, sources);
+        if (sf == null)
+            sf = find_source1(path, system_sources);
+
+        return sf;
     }
     
     // Update the text of a (possibly new) source file in this program.
@@ -875,9 +918,15 @@ class Program : Object {
         return null;
     }
     
-    public static Program find_containing(string path) {
+    public static Program find_containing(string path, bool parse_system_vapi = false) {
         string dir = Path.get_dirname(path);
         Program p = find_program(dir);
+        
+        if (parse_system_vapi) {
+            if (p == null)
+                p = new Program(dir);
+            p.parse_system_vapi_files();
+        }
         
         return (p != null) ? p : new Program(dir);
     }
@@ -1012,22 +1061,6 @@ class Program : Object {
         }
         
         return null;
-    }
-
-    public void parse_system_vapi_files() {
-        // Don't parse system vapi files twice
-        if (system_sources.size > 0)
-            return;
-
-        // Only begin parsing vapi files after the local vapi files have been parsed        
-        if (is_parsing()) {
-            local_parse_complete += parse_system_vapi_files;
-        } else {
-            parsing = true;
-            parse_list_index = 0;
-            sourcefile_paths.clear();
-            GLib.Idle.add(this.parse_system_vala_files_idle_callback);
-        }
     }
 
     public bool is_parsing() {

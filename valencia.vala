@@ -224,6 +224,9 @@ class Instance : Object {
     // Tooltips
     Tooltip tip;
     
+    // Signal handlers
+    GLib.SList<Pair<weak GLib.Object, ulong>> signal_handler_list;
+    
     const Gtk.ActionEntry[] entries = {
         { "SearchGoToDefinition", null, "Go to _Definition", "F12",
           "Jump to a symbol's definition", on_go_to_definition },
@@ -370,31 +373,43 @@ class Instance : Object {
         assert(run_menu_item != null);
 
         init_error_regex();
-        
-        Signal.connect(window, "tab-added", (Callback) tab_added_callback, this);
-        Signal.connect(window, "tab-removed", (Callback) tab_removed_callback, this);
+
+        add_signal(window, "tab-added", (Callback) tab_added_callback);
+        add_signal(window, "tab-removed", (Callback) tab_removed_callback);
+    }
+
+    ~Instance() {
+        foreach (Pair<GLib.Object, ulong> pair in signal_handler_list) {
+            if (SignalHandler.is_connected(pair.first, pair.second))
+                SignalHandler.disconnect(pair.first, pair.second);
+        }
+    }
+    
+    void add_signal(GLib.Object instance, string signal_name, GLib.Callback cb) {
+        ulong id = Signal.connect(instance, signal_name, cb, this);
+        signal_handler_list.append(new Pair<GLib.Object, ulong>(instance, id));
     }
 
     static void tab_added_callback(Gedit.Window window, Gedit.Tab tab, Instance instance) {
         Gedit.Document document = tab.get_document();
-        Signal.connect(document, "saved", (Callback) all_save_callback, instance);
+        instance.add_signal(document, "saved", (Callback) all_save_callback);
 
         // Hook up this particular tab's view with tooltips
         Gedit.View tab_view = tab.get_view();
-        Signal.connect(tab_view, "key-press-event", (Callback) key_press_callback, instance);
+        instance.add_signal(tab_view, "key-press-event", (Callback) key_press_callback);
         
         Gtk.Widget widget = tab_view.get_parent();
         Gtk.ScrolledWindow scrolled_window = widget as Gtk.ScrolledWindow;
         assert(scrolled_window != null);
         
         Gtk.Adjustment vert_adjust = scrolled_window.get_vadjustment();
-        Signal.connect(vert_adjust, "value-changed", (Callback) scrolled_callback, instance);
+        instance.add_signal(vert_adjust, "value-changed", (Callback) scrolled_callback);
 
-        Signal.connect_after(document, "insert-text", (Callback) redisplay_tooltip_callback, instance);
-        Signal.connect(tab_view, "key-release-event", 
-                       (Callback) hide_tooltip_on_text_delete_callback, instance);
-        Signal.connect(tab_view, "focus-out-event", (Callback) focus_off_view_callback, instance);
-        Signal.connect(tab_view, "button-press-event", (Callback) button_press_callback, instance);
+        instance.add_signal(document, "insert-text", (Callback) redisplay_tooltip_callback);
+        instance.add_signal(tab_view, "key-release-event", 
+                            (Callback) hide_tooltip_on_text_delete_callback);
+        instance.add_signal(tab_view, "focus-out-event", (Callback) focus_off_view_callback);
+        instance.add_signal(tab_view, "button-press-event", (Callback) button_press_callback);
     }
 
     static void tab_removed_callback(Gedit.Window window, Gedit.Tab tab, Instance instance) {
@@ -765,8 +780,7 @@ class Instance : Object {
     }
     
     void get_buffer_str_and_pos(string filename, out weak string source, out int pos) {
-        Program program = Program.find_containing(filename);
-        program.parse_system_vapi_files();
+        Program program = Program.find_containing(filename, true);
 
         // Reparse any modified documents in this program.
         foreach (Gedit.Document d in Gedit.App.get_default().get_documents())
@@ -787,16 +801,12 @@ class Instance : Object {
         if (filename == null)
             return;
 
-        Program program = Program.find_containing(filename);
-        program.parse_system_vapi_files();
+        Program program = Program.find_containing(filename, true);
         
         if (program.is_parsing()) {
             program.parsed_file += update_parse_dialog;
             program.system_parse_complete += jump_to_symbol_definition;
-        }
-        else {
-            jump_to_symbol_definition();
-        }
+        } else jump_to_symbol_definition();
     }
 
     void jump_to_symbol_definition() {
@@ -1119,11 +1129,6 @@ class Instance : Object {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
     void update_parse_dialog(double percentage) {
-        if (window == null) {
-            parsing_dialog.close();
-            return;
-        }
-    
         if (percentage == 1.0) {
             if (parsing_dialog != null) {
                 parsing_dialog.close();
@@ -1147,15 +1152,12 @@ class Instance : Object {
         if (filename == null)
             return;
         
-        Program program = Program.find_containing(filename);
-        program.parse_system_vapi_files();
+        Program program = Program.find_containing(filename, true);
         
         if (program.is_parsing()) {
             program.parsed_file += update_parse_dialog;
             program.system_parse_complete += display_tooltip;
-        }
-        else
-            display_tooltip();
+        } else display_tooltip();
     }
     
     void display_tooltip() {
