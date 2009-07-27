@@ -6,9 +6,12 @@
 
 using Gee;
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-//                                    Helper data structures                                      //
-////////////////////////////////////////////////////////////////////////////////////////////////////
+extern void qsort(void *p, size_t num, size_t size, GLib.CompareFunc func);
+
+
+////////////////////////////////////////////////////////////
+//                 Helper data structures                 //
+////////////////////////////////////////////////////////////
 
 class Pair<G1, G2> : GLib.Object {
     public G1 first;
@@ -46,9 +49,9 @@ class Stack<G> : GLib.Object {
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-//                                 GLib/GTK helper functions                                      //
-////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+//               GLib/GTK helper functions                //
+////////////////////////////////////////////////////////////
 
 bool dir_has_parent(string dir, string parent) {
     GLib.File new_path = GLib.File.new_for_path(dir);
@@ -81,9 +84,39 @@ string get_full_line_from_text_iter(Gtk.TextIter iter) {
     return iter.get_text(end);
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-//                                      GTK-related classes                                       //
-////////////////////////////////////////////////////////////////////////////////////////////////////
+void get_coords_at_buffer_offset(Gedit.Window window, int offset, bool above, bool beside,
+                                 out int x, out int y) {
+    Gedit.Document buffer = window.get_active_document();
+    Gtk.TextIter method_iter;
+    buffer.get_iter_at_offset(out method_iter, offset);
+    
+    Gedit.View active_view = window.get_active_view();
+    Gdk.Rectangle rect;
+    active_view.get_iter_location(method_iter, out rect);
+    int win_x, win_y;
+    active_view.buffer_to_window_coords(Gtk.TextWindowType.WIDGET, rect.x, rect.y, 
+                                        out win_x, out win_y);
+    int widget_x = active_view.allocation.x;
+    int widget_y = active_view.allocation.y; 
+    int orig_x, orig_y;
+    window.window.get_origin(out orig_x, out orig_y);
+
+    x = win_x + widget_x + orig_x;
+    y = win_y + widget_y + orig_y;
+    x += beside ? rect.height : 0; 
+    y -= above ? rect.height : 0;
+}
+
+int compare_string(void *a, void *b) {
+    char **a_string = a;
+    char **b_string = b;
+    
+    return strcmp(*a_string, *b_string);
+}
+
+////////////////////////////////////////////////////////////
+//                  Gtk-related classes                   //
+////////////////////////////////////////////////////////////
 
 class Tooltip {
     weak Gedit.Window parent;
@@ -113,26 +146,15 @@ class Tooltip {
         method_name = qualified_method_name;
         visible = true;
 
-        tip_text.set_text(prototype);
-
-        // Get x, y location of cursor on the screen and store the original position of the method
         Gedit.Document document = parent.get_active_document();
-                
         Gtk.TextIter method_iter;
         document.get_iter_at_offset(out method_iter, method_pos);
         method_mark = document.create_mark(null, method_iter, true);
-        
-        Gedit.View active_view = parent.get_active_view();
-        Gdk.Rectangle rect;
-        active_view.get_iter_location(method_iter, out rect);
-        int x, y;
-        active_view.buffer_to_window_coords(Gtk.TextWindowType.WIDGET, rect.x, rect.y, out x, out y);
-        int widget_x = active_view.allocation.x;
-        int widget_y = active_view.allocation.y; 
-        int orig_x, orig_y;
-        parent.window.get_origin(out orig_x, out orig_y);
+        tip_text.set_text(prototype);
 
-        window.move(x + widget_x + orig_x, y + widget_y + orig_y - rect.height);
+        int x, y;
+        get_coords_at_buffer_offset(parent, method_pos, true, false, out x, out y);
+        window.move(x, y);
         window.resize(1, 1);
         window.show_all();
     }
@@ -159,6 +181,14 @@ class Tooltip {
         Gtk.TextIter iter;
         doc.get_iter_at_mark(out iter, method_mark);
         return get_full_line_from_text_iter(iter);
+    }
+
+    public Gtk.TextIter get_iter_at_method() {
+        assert(!method_mark.get_deleted());
+        Gtk.TextBuffer doc = method_mark.get_buffer();
+        Gtk.TextIter iter;
+        doc.get_iter_at_mark(out iter, method_mark);
+        return iter;
     }
     
     public string get_method_name() {

@@ -142,6 +142,249 @@ class CharRange : Destination {
     }    
 }
 
+class AutocompleteDialog : Object {
+    weak Gedit.Window parent;
+    Gtk.Window window;
+    Gtk.ListStore list;
+    Gtk.TreeView treeview;
+    Gtk.TreeViewColumn column_view;
+    Gtk.ScrolledWindow scrolled_window;
+    bool visible;
+    string partial_name;
+
+    public AutocompleteDialog(Gedit.Window parent_win) {
+        parent = parent_win;
+        visible = false;
+        list = new Gtk.ListStore(1, GLib.Type.from_name("gchararray"));
+
+        Gtk.CellRendererText renderer = new Gtk.CellRendererText();
+        column_view = new Gtk.TreeViewColumn();
+        column_view.pack_start(renderer, true); 
+        column_view.set_sizing(Gtk.TreeViewColumnSizing.AUTOSIZE);
+        column_view.set_attributes(renderer, "text", 0, null);
+        treeview = new Gtk.TreeView.with_model(list);
+        treeview.append_column(column_view);
+        treeview.headers_visible = false;
+
+        scrolled_window = new Gtk.ScrolledWindow(null, null); 
+        scrolled_window.hscrollbar_policy = Gtk.PolicyType.NEVER;
+        scrolled_window.vscrollbar_policy = Gtk.PolicyType.AUTOMATIC;
+        scrolled_window.add(treeview);
+
+        window = new Gtk.Window(Gtk.WindowType.POPUP); 
+        window.add(scrolled_window);
+        window.set_destroy_with_parent(true);
+        window.set_default_size(200, 1); 
+        window.set_resizable(true);
+        window.set_title("");
+        window.set_border_width(1);
+        
+        window.show_all();
+        window.hide();
+
+        Signal.connect(window, "expose-event", (Callback) draw_callback, this);
+        Signal.connect(treeview, "row-activated", (Callback) row_activated_callback, this);
+    }
+
+    static bool draw_callback(Gtk.Window window, Gdk.EventExpose event, AutocompleteDialog dialog) {
+        Gtk.paint_flat_box(dialog.window.style, dialog.window.window, 
+                           Gtk.StateType.NORMAL, Gtk.ShadowType.OUT, 
+                           null, dialog.window, "tooltip",
+                           dialog.window.allocation.x, dialog.window.allocation.y,
+                           dialog.window.allocation.width, dialog.window.allocation.height);
+
+        dialog.scrolled_window.expose_event(event);
+
+        return true;
+    }
+
+    static void row_activated_callback(Gtk.TreeView view, Gtk.TreePath path, 
+                                       Gtk.TreeViewColumn column, AutocompleteDialog dialog) {
+        dialog.select_item();
+    }
+
+    public void show(SymbolSet symbol_set) {
+        list.clear();
+        visible = true;
+        partial_name = symbol_set.get_name();
+
+       string[] symbols = symbol_set.get_symbols();
+
+        if (symbols != null) {
+            foreach (string s in symbols) {
+                Gtk.TreeIter iterator;
+                list.append(out iterator);
+                list.set(iterator, 0, s, -1);
+            }
+        } else {
+            hide();
+            return;
+        }
+
+        // TODO: this must be updated to account for font size changes when adding ticket #560        
+        int size = list.iter_n_children(null);
+        if (size > 6) {
+            scrolled_window.vscrollbar_policy = Gtk.PolicyType.AUTOMATIC;
+            window.resize(200, 140);
+        } else {
+            scrolled_window.vscrollbar_policy = Gtk.PolicyType.NEVER;
+            window.resize(200, size * 23);
+        }
+
+        treeview.get_hadjustment().set_value(0);
+        treeview.get_vadjustment().set_value(0);
+
+        Gedit.Document document = parent.get_active_document(); 
+        Gtk.TextMark insert_mark = document.get_insert();
+        Gtk.TextIter insert_iter;
+        document.get_iter_at_mark(out insert_iter, insert_mark); 
+        int x, y;
+        get_coords_at_buffer_offset(parent, insert_iter.get_offset(), false, true, out x, out y);
+
+        window.move(x, y);
+        window.show_all(); 
+        window.queue_draw();
+        select_first_cell();
+    }
+    
+    public void hide() {
+        if (!visible)
+            return;
+        
+        visible = false;
+        window.hide();
+    }
+
+    public bool is_visible() {
+        return visible;
+    }
+
+    void select(Gtk.TreePath path, bool scroll = true) {
+        treeview.set_cursor(path, null, false);
+        if (scroll)
+            treeview.scroll_to_cell(path, null, false, 0.0f, 0.0f);
+    }
+
+    void scroll_to_and_select_cell(double adjustment_value, int y) {
+        scrolled_window.vadjustment.set_value(adjustment_value);        
+        
+        Gtk.TreePath path;
+        int cell_x, cell_y;
+        treeview.get_path_at_pos(0, y, out path, null, out cell_x, out cell_y);
+        select(path, false);
+    }
+    
+    Gtk.TreePath get_path_at_cursor() {
+        Gtk.TreePath path;
+        Gtk.TreeViewColumn column;
+        treeview.get_cursor(out path, out column);
+        return path;
+    }
+
+    public Gtk.TreePath select_first_cell() {
+        Gtk.TreePath start = new Gtk.TreePath.first();
+        select(start);
+        return start;
+    }
+
+    public void select_last_cell() {
+        // The list index is 0-based, the last element is 'size - 1'
+        int size = list.iter_n_children(null) - 1;
+        select(new Gtk.TreePath.from_string(size.to_string()));
+    }
+
+    public void select_previous() {
+        Gtk.TreePath path = get_path_at_cursor();
+        
+        if (path != null) {
+            if (path.prev())
+                select(path);
+            else select_last_cell();
+        }
+    }
+
+    public void select_next() {
+        Gtk.TreePath path = get_path_at_cursor();
+        
+        if (path != null) {
+            Gtk.TreeIter iter;
+            path.next();
+
+            // Make sure the next element iterator is valid
+            if (list.get_iter(out iter, path))
+                select(path);
+            else select_first_cell();
+        }
+    }
+
+    public void page_up() {
+        // Save the current y position of the selection
+        Gtk.TreePath cursor_path = get_path_at_cursor();
+        Gdk.Rectangle rect;
+        treeview.get_cell_area(cursor_path, null, out rect);
+        
+        // Don't wrap page_up
+        if (!cursor_path.prev()) {
+            return;
+        }
+
+        double adjust_value = scrolled_window.vadjustment.get_value();
+        double page_size = scrolled_window.vadjustment.get_page_size();
+        // If the current page is the top page, just select the top cell
+        if (adjust_value == scrolled_window.vadjustment.lower) {
+            select_first_cell();
+            return;
+        }
+
+        // it is 'y + 1' because only 'y' would be the element before the one we want
+        scroll_to_and_select_cell(adjust_value - (page_size - rect.height), rect.y + 1);
+    }
+
+    public void page_down() {
+        // Save the current y position of the selection
+        Gtk.TreePath cursor_path = get_path_at_cursor();
+        Gdk.Rectangle rect;
+        treeview.get_cell_area(cursor_path, null, out rect);
+        
+        // Don't wrap page_down
+        cursor_path.next();
+        Gtk.TreeIter iter;
+        if (!list.get_iter(out iter, cursor_path)) {
+            return;
+        }
+
+        double adjust_value = scrolled_window.vadjustment.get_value();
+        double page_size = scrolled_window.vadjustment.get_page_size();
+        // If the current page is the bottom page, just select the last cell
+        if (adjust_value >= scrolled_window.vadjustment.upper - page_size) {
+            select_last_cell();
+            return;
+        }
+
+        scroll_to_and_select_cell(adjust_value + (page_size - rect.height), rect.y + 1);
+    }
+
+    public void select_item() {
+        Gedit.Document buffer = parent.get_active_document();
+        Gtk.TreePath path;
+        Gtk.TreeViewColumn column;
+        treeview.get_cursor(out path, out column);
+        
+        Gtk.TreeIter iter;
+        list.get_iter(out iter, path);
+        GLib.Value v;
+        list.get_value(iter, 0, out v);
+
+        weak string selection = v.get_string();
+        string completed = selection.substring(partial_name.length);
+
+        long offset = (selection.has_suffix(")")) ? 1 : 0;
+        buffer.insert_at_cursor(completed, (int) (completed.length - offset));
+
+        hide();
+    }
+}
+
 class ErrorInfo : Object {
     public string filename;
     public string start_line;
@@ -203,7 +446,6 @@ class Instance : Object {
     Gtk.ScrolledWindow output_pane;
 
     // Parsing dialog
-    public delegate void parse_files_update_callback(double percentage);
     ProgressBarDialog parsing_dialog;
 
     // Run command
@@ -223,10 +465,11 @@ class Instance : Object {
 
     // Tooltips
     Tooltip tip;
-    
+    AutocompleteDialog autocomplete;
+
     // Signal handlers
     GLib.SList<Pair<weak GLib.Object, ulong>> signal_handler_list;
-    
+
     const Gtk.ActionEntry[] entries = {
         { "SearchGoToDefinition", null, "Go to _Definition", "F12",
           "Jump to a symbol's definition", on_go_to_definition },
@@ -238,8 +481,8 @@ class Instance : Object {
           "Go to the next compiler error in the ouput and view panes", on_next_error },
         { "SearchPrevError", null, "_Previous Error", "<ctrl><alt>p",
           "Go to the previous compiler error in the ouput and view panes", on_prev_error },
-        { "SearchDisplayTooltip", null, "Display _Tooltip", "<ctrl>space",
-          "Display a tooltip for the method you are typing", on_display_tooltip },
+        { "SearchAutocomplete", null, "_Autocomplete", "<ctrl>space",
+          "Display a tooltip for the method you are typing", on_display_tooltip_or_autocomplete },
         
         { "Project", null, "_Project" },   // top-level menu
 
@@ -261,7 +504,7 @@ class Instance : Object {
                 <menuitem name="SearchNextErrorMenu" action="SearchNextError"/>
                 <menuitem name="SearchPrevErrorMenu" action="SearchPrevError"/>
                 <separator/>
-                <menuitem name="SearchDisplayTooltipMenu" action="SearchDisplayTooltip"/>
+                <menuitem name="SearchAutocompleteMenu" action="SearchAutocomplete"/>
               </placeholder>
             </menu>
             <placeholder name="ExtraMenu_1">
@@ -283,9 +526,9 @@ class Instance : Object {
 
         // Tooltips        
         tip = new Tooltip(window);
+        autocomplete = new AutocompleteDialog(window);
 
         // Output pane
-        
         output_buffer = new Gtk.TextBuffer(null);
         
         error_tag = output_buffer.create_tag("error", "foreground", "#c00");
@@ -299,7 +542,7 @@ class Instance : Object {
         Pango.FontDescription font = Pango.FontDescription.from_string("Monospace");
         output_view.modify_font(font);
         output_view.button_press_event += on_button_press;
-        
+
         output_pane = new Gtk.ScrolledWindow(null, null);
         output_pane.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC);
         output_pane.add(output_view);
@@ -361,7 +604,7 @@ class Instance : Object {
         assert(prev_error_menu_item != null);
         
         display_tooltip_menu_item = (Gtk.MenuItem) manager.get_widget(
-            "/MenuBar/SearchMenu/SearchOps_8/SearchDisplayTooltipMenu");
+            "/MenuBar/SearchMenu/SearchOps_8/SearchAutocompleteMenu");
         assert(display_tooltip_menu_item != null);
         
         build_menu_item = (Gtk.MenuItem) manager.get_widget(
@@ -385,8 +628,12 @@ class Instance : Object {
         }
     }
     
-    void add_signal(GLib.Object instance, string signal_name, GLib.Callback cb) {
-        ulong id = Signal.connect(instance, signal_name, cb, this);
+    void add_signal(GLib.Object instance, string signal_name, GLib.Callback cb, 
+                    bool after = false) {
+        ulong id;
+        if (!after)
+            id = Signal.connect(instance, signal_name, cb, this);
+        else id = Signal.connect_after(instance, signal_name, cb, this);
         signal_handler_list.append(new Pair<GLib.Object, ulong>(instance, id));
     }
 
@@ -405,9 +652,8 @@ class Instance : Object {
         Gtk.Adjustment vert_adjust = scrolled_window.get_vadjustment();
         instance.add_signal(vert_adjust, "value-changed", (Callback) scrolled_callback);
 
-        instance.add_signal(document, "insert-text", (Callback) redisplay_tooltip_callback);
-        instance.add_signal(tab_view, "key-release-event", 
-                            (Callback) hide_tooltip_on_text_delete_callback);
+        instance.add_signal(document, "insert-text", (Callback) text_inserted_callback, true);
+        instance.add_signal(document, "delete-range", (Callback) text_deleted_callback, true);
         instance.add_signal(tab_view, "focus-out-event", (Callback) focus_off_view_callback);
         instance.add_signal(tab_view, "button-press-event", (Callback) button_press_callback);
     }
@@ -426,50 +672,113 @@ class Instance : Object {
     
     static void scrolled_callback(Gtk.Adjustment adjust, Instance instance) {
         instance.tip.hide();
+        instance.autocomplete.hide();
     }
 
     static bool key_press_callback(Gedit.View view, Gdk.EventKey key, Instance instance) {
-        bool handled;
+        bool handled = false; 
         
+        // These will always catch, even with alt and ctrl modifiers
+
         switch(key.keyval) {
             case 0xff1b: // escape
-                instance.tip.hide();
+                if (instance.autocomplete.is_visible())
+                    instance.autocomplete.hide();
+                else
+                    instance.tip.hide();
                 handled = true;
                 break;
+            case 0xff52: // up arrow
+                if (instance.autocomplete.is_visible()) {
+                    instance.autocomplete.select_previous();
+                    handled = true;
+                }
+                break;
+            case 0xff54: // down arrow
+                if (instance.autocomplete.is_visible()) {
+                    instance.autocomplete.select_next();
+                    handled = true;
+                }
+                break;
+            case 0xff50: // home
+                if (instance.autocomplete.is_visible()) {
+                    instance.autocomplete.select_first_cell();
+                    handled = true;
+                }
+                break;
+            case 0xff57: // end
+                if (instance.autocomplete.is_visible()) {
+                    instance.autocomplete.select_last_cell();
+                    handled = true;
+                }
+                break;
+            case 0xff55: // page up
+                if (instance.autocomplete.is_visible()) {
+                    instance.autocomplete.page_up();
+                    handled = true;
+                }
+                break;
+            case 0xff56: // page down
+                if (instance.autocomplete.is_visible()) {
+                    instance.autocomplete.page_down();
+                    handled = true;
+                }
+                break;
+            case 0xff0d: // return
+                if (instance.autocomplete.is_visible()) {
+                    instance.autocomplete.select_item();
+                    handled = true;
+                }
+                break;
             default:
-                handled = false;
                 break;
         }
         return handled;
     }
-    
+
     static bool focus_off_view_callback(Gedit.View view, Gdk.EventFocus focus, Instance instance) {
-        instance.tip.hide();    
+        instance.tip.hide();
+        instance.autocomplete.hide();
         // Let other handlers catch this event as well
         return false;
     }
 
-    static void redisplay_tooltip_callback(Gedit.Document doc, Gtk.TextIter iter, string text,
-                                           int length, Instance instance) {
+    static void text_inserted_callback(Gedit.Document doc, Gtk.TextIter iter, string text,
+                                       int length, Instance instance) {
+        if (instance.autocomplete.is_visible()) {
+            if (text.get_char().isspace())
+                instance.autocomplete.hide();
+            else
+                instance.display_autocomplete();
+
+        }
+
         if (instance.tip.is_visible()) {
             if (text == ")" || text == "(") {
                 instance.tip.hide();
-                instance.on_display_tooltip();
+                instance.autocomplete.hide();
+                instance.display_tooltip();
             } 
         } 
     }
 
-    static void hide_tooltip_on_text_delete_callback(Gedit.View view, Gdk.EventKey key,
-                                                     Instance instance) {
+    static void text_deleted_callback(Gedit.Document doc, Gtk.TextIter start, Gtk.TextIter end,
+                                      Instance instance) {
         if (instance.tip.is_visible()) {
             string line = instance.tip.get_method_line();
             if (!line.contains(instance.tip.get_method_name() + "("))
                 instance.tip.hide(); 
         }
+        
+        if (instance.autocomplete.is_visible()) {
+            instance.autocomplete.hide();
+            instance.on_display_tooltip_or_autocomplete();
+        }
     }
 
     static bool button_press_callback(Gedit.View view, Gdk.EventButton event, Instance instance) {
-        instance.tip.hide();   
+        instance.tip.hide();
+        instance.autocomplete.hide();
         // Let other handlers catch this event as well
         return false;
     }
@@ -751,9 +1060,9 @@ class Instance : Object {
         }
     }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-//                                     Jump to definition                                         //
-////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+//                   Jump to Definition                   //
+////////////////////////////////////////////////////////////
 
     void add_mark_at_insert_to_history() {
         Gedit.Document doc = window.get_active_document();
@@ -798,7 +1107,7 @@ class Instance : Object {
 
     void on_go_to_definition() {
         string? filename = active_filename();
-        if (filename == null)
+        if (filename == null || !Program.is_vala(filename))
             return;
 
         Program program = Program.find_containing(filename, true);
@@ -824,7 +1133,8 @@ class Instance : Object {
 
         Program program = Program.find_containing(filename);
         SourceFile sf = program.find_source(filename);
-        Symbol? sym = sf.resolve(name, pos);
+        SymbolSet symbols = sf.resolve(name, pos);
+        Symbol? sym = symbols.first();
         if (sym == null)
             return;
 
@@ -899,9 +1209,9 @@ class Instance : Object {
         return !mark.get_deleted();
     }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-//                                       Jump to error                                            //
-////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+//                      Jump to Error                     //
+////////////////////////////////////////////////////////////
 
     void update_error_history_index(ErrorList program_errors, ErrorInfo info) {
         program_errors.error_index = -1;
@@ -1072,9 +1382,9 @@ class Instance : Object {
         move_to_error(program);
     }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-//                                        Run Command                                             //
-////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+//                      Run Command                       //
+////////////////////////////////////////////////////////////
 
     void on_run() {
         if (active_filename() == null || child_process_running)
@@ -1124,9 +1434,9 @@ class Instance : Object {
         child_process_running = false;
     }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-//                                         Status bar update                                      //
-////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+//                    Status bar update                   //
+////////////////////////////////////////////////////////////
 
     void update_parse_dialog(double percentage) {
         if (percentage == 1.0) {
@@ -1139,58 +1449,156 @@ class Instance : Object {
 
         if (parsing_dialog == null)
             parsing_dialog = new ProgressBarDialog(window, "Parsing Vala files");
-            
+
         parsing_dialog.set_percentage(percentage);
     }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-//                                         Tooltip display                                        //
-////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+//                 Tooltip/Autocomplete                   //
+////////////////////////////////////////////////////////////
 
-    void on_display_tooltip() {
+    void on_display_tooltip_or_autocomplete() {
         string? filename = active_filename();
-        if (filename == null)
+        if (filename == null || !Program.is_vala(filename))
             return;
-        
+
         Program program = Program.find_containing(filename, true);
         
         if (program.is_parsing()) {
             program.parsed_file += update_parse_dialog;
-            program.system_parse_complete += display_tooltip;
-        } else display_tooltip();
+            program.system_parse_complete += display_tooltip_or_autocomplete;
+        } else display_tooltip_or_autocomplete();
+    }
+
+    void display_tooltip_or_autocomplete() {
+        Method method;
+        CompoundName method_name;
+        int method_pos, cursor_pos;
+        CompoundName name_at_cursor;
+        get_tooltip_and_autocomplete_info(out method, out method_name, out method_pos, 
+                                          out cursor_pos, out name_at_cursor);
+
+        if (method != null)
+            tip.show(method_name.to_string(), " " + method.to_string() + " ", method_pos);  
+        else {
+            if (name_at_cursor == null)
+                name_at_cursor = new SimpleName("");
+            
+            string? filename = active_filename();
+            Program program = Program.find_containing(filename);
+            SourceFile sf = program.find_source(filename);
+            
+            if (cursor_is_inside_word())
+                return;
+            
+            SymbolSet symbol_set = sf.resolve_prefix(name_at_cursor, cursor_pos);
+            autocomplete.show(symbol_set);
+        }
+    }
+
+    void display_tooltip() {
+        Method method;
+        CompoundName method_name;
+        int method_pos, cursor_pos;
+        CompoundName name_at_cursor;
+        get_tooltip_and_autocomplete_info(out method, out method_name, out method_pos, 
+                                          out cursor_pos, out name_at_cursor);
+
+        if (method != null)
+            tip.show(method_name.to_string(), " " + method.to_string() + " ", method_pos);  
     }
     
-    void display_tooltip() {
+    void display_autocomplete() {
+        Method method;
+        CompoundName method_name;
+        int method_pos, cursor_pos;
+        CompoundName name_at_cursor;
+        get_tooltip_and_autocomplete_info(out method, out method_name, out method_pos, 
+                                          out cursor_pos, out name_at_cursor);
+                                          
+        if (name_at_cursor == null)
+            name_at_cursor = new SimpleName("");
+        
         string? filename = active_filename();
-        if (filename == null)
+        Program program = Program.find_containing(filename);
+        SourceFile sf = program.find_source(filename);
+        
+        if (cursor_is_inside_word())
             return;
+        
+        SymbolSet symbol_set = sf.resolve_prefix(name_at_cursor, cursor_pos);
+        autocomplete.show(symbol_set);
+    }
 
+    void get_tooltip_and_autocomplete_info(out Method? method, out CompoundName? name,
+                                           out int method_pos, out int cursor_pos,
+                                           out CompoundName? name_at_cursor) {
+        string? filename = active_filename();
         weak string source;
-        int pos;
-        get_buffer_str_and_pos(filename, out source, out pos);
+        get_buffer_str_and_pos(filename, out source, out cursor_pos); 
 
-        int method_pos;
-        CompoundName name = new Parser().method_at(source, pos, out method_pos);
-        if (name == null)
-            return;
+        name = new Parser().method_at(source, cursor_pos, out method_pos, out name_at_cursor);
 
         Program program = Program.find_containing(filename);
         SourceFile sf = program.find_source(filename);
-        Symbol? sym = sf.resolve(name, pos);
-        if (sym == null)
-            return;
-        
-        Method method = sym as Method; 
-        
-        if (method == null)
-            return;
 
-        tip.show(name.to_string(), " " + method.to_string() + " ", method_pos);
+        // Give the method tooltip precedence over autocomplete
+        method = null;
+        if (name != null && (!tip.is_visible() || cursor_is_inside_different_function(method_pos))) {
+            SymbolSet symbol_set = sf.resolve(name, cursor_pos);
+            Symbol sym = symbol_set.first();
+            if (sym != null)
+                method = sym as Method; 
+        }
     }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-//                              Menu activation and plugin class                                  //
-////////////////////////////////////////////////////////////////////////////////////////////////////
+    bool cursor_is_inside_different_function(int method_pos) {
+        Gtk.TextIter begin_iter = tip.get_iter_at_method();
+
+        Gedit.Document document = window.get_active_document();
+        Gtk.TextIter end_iter;
+        document.get_iter_at_offset(out end_iter, method_pos);
+
+        if (begin_iter.get_offset() > end_iter.get_offset()) {
+            Gtk.TextIter temp;
+            temp = begin_iter; 
+            begin_iter = end_iter;
+            end_iter = temp;
+        }
+
+        // Make sure the last character is a '(', since the method_pos offset will always be the
+        // character before the '(' in a function call
+        end_iter.forward_char();
+
+        int left_parens = 0;
+        begin_iter.forward_char();
+        while (begin_iter.get_offset() <= end_iter.get_offset()) {
+            unichar c = begin_iter.get_char();
+            if (c == ')') {
+                if (--left_parens != 0)
+                    return true;
+            } else if (c == '(') {
+                ++left_parens;
+            }
+            
+            begin_iter.forward_char();
+        }
+            
+        return left_parens != 0;
+    }
+    
+    bool cursor_is_inside_word() {
+        Gedit.Document document = window.get_active_document();
+        Gtk.TextMark insert_mark = document.get_insert();
+        Gtk.TextIter insert_iter;
+        document.get_iter_at_mark(out insert_iter, insert_mark);
+        
+        return insert_iter.get_char().isalnum();
+    }
+
+////////////////////////////////////////////////////////////
+//           Menu activation and plugin class             //
+////////////////////////////////////////////////////////////
 
     bool errors_exist() {
         Program program = get_active_document_program();
@@ -1213,6 +1621,8 @@ class Instance : Object {
 
         next_error_menu_item.set_sensitive(activate_error_search);
         prev_error_menu_item.set_sensitive(activate_error_search);
+        
+        display_tooltip_menu_item.set_sensitive(definition_item_sensitive);
     }
 
     void on_project_menu_activated() {
@@ -1241,6 +1651,8 @@ class Instance : Object {
         panel.remove_item(output_pane);
     }
 }
+
+
 
 class Plugin : Gedit.Plugin {
     public Gee.ArrayList<Instance> instances = new Gee.ArrayList<Instance>();

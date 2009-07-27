@@ -32,10 +32,81 @@ class QualifiedName : CompoundName {
     }
 }
 
+class SymbolSet : Object {
+    HashSet<Symbol> symbols = new HashSet<Symbol>();
+    string name;
+    bool exact;
+    bool type;
+
+    SymbolSet(string name, bool type, bool exact) {
+        this.name = name;
+        this.type = type;
+        this.exact = exact;
+        
+        // Since the set stores Symbols, but we actually want to hash their (name) strings, we must
+        // provide custom hash and equality functions
+        symbols.hash_func = Symbol.hash;
+        symbols.equal_func = Symbol.equal;
+    }
+
+    public bool add(Symbol sym) {
+        if (sym.name == null)
+            return false;
+
+        if (exact) {
+            if (sym.name != name)
+                return false;
+        } else {
+            if (!sym.name.has_prefix(name))
+                return false;
+        }
+
+        if (type && sym as TypeSymbol == null)
+            return false;
+
+        symbols.add(sym);
+
+        return exact;
+    }
+
+    // Convenience function for getting the first element without having to use iterators.
+    // This is mostly for users expecting exact matches.
+    public Symbol? first() {
+        foreach (Symbol s in symbols)
+            return s;
+        return null;
+    }
+
+    public string[]? get_symbols() {
+        // It doesn't make sense to display the exact match of a partial search if there is only
+        // one symbol found that matches perfectly 
+        if (symbols.size == 0 || (symbols.size == 1 && !exact && first().name == name))
+            return null;
+
+        string[] list = new string[symbols.size];
+
+        // Make sure the user receives the array in a sorted order
+        int i = 0;
+        foreach (Symbol s in symbols) {
+            string list_name = (s is Method) ? s.name + "()" : s.name;
+            list[i] = list_name;
+            ++i;
+        }
+
+        qsort(list, symbols.size, sizeof(string), compare_string);
+        
+        return list;
+    }
+    
+    public string get_name() {
+        return name;
+    }
+}
+
 abstract class Node : Object {
     public int start;
     public int end;
-    
+
     Node(int start, int end) {
         this.start = start;
         this.end = end;
@@ -66,13 +137,13 @@ abstract class Node : Object {
         return c;
     }
     
-    public static Symbol? lookup_in_array(ArrayList<Node> a, string name) {
+    public static bool lookup_in_array(ArrayList<Node> a, SymbolSet symbols) {
         foreach (Node n in a) {
             Symbol s = n as Symbol;
-            if (s != null && s.name == name)
-                return s;
+            if (s != null && symbols.add(s))
+                return true;
         }
-        return null;
+        return false;
     }
     
     public abstract void print(int level);
@@ -95,10 +166,23 @@ abstract class Symbol : Node {
     protected void print_name(int level, string s) {
         do_print(level, s + " " + name);
     }
+
+    public static uint hash(void *item) {
+        weak Symbol symbol = (Symbol) item;
+        return symbol.name.hash();
+    }
+
+    public static bool equal(void* a, void* b) {
+        weak Symbol a_symbol = (Symbol) a;
+        weak Symbol b_symbol = (Symbol) b;
+        return a_symbol.name == b_symbol.name;
+    }
 }
 
 interface Scope : Object {
-    public abstract Symbol? lookup(string name, int pos);
+    // Adds all members not past the position specified by 'pos' inside this scope to 'symbols'
+    // (members meaning fields, methods, classes, enums, etc...)
+    public abstract bool lookup(SymbolSet symbols, int pos);
 }
 
 abstract class TypeSymbol : Symbol {
@@ -110,7 +194,7 @@ abstract class TypeSymbol : Symbol {
 abstract class Statement : Node {
     public Statement(int start, int end) { base(start, end); }
     
-    public virtual Symbol? defines_symbol(string name) { return null; }
+    public virtual bool defines_symbol(SymbolSet symbols) { return false; }
 }
 
 abstract class Variable : Symbol {
@@ -144,8 +228,8 @@ class DeclarationStatement : Statement {
         this.variable = variable;
     }
     
-    public override Symbol? defines_symbol(string name) {
-        return variable.name == name ? variable : null;
+    public override bool defines_symbol(SymbolSet symbols) {
+        return symbols.add(variable);
     }
     
     public override void print(int level) {
@@ -165,8 +249,8 @@ class ForEach : Statement, Scope {
     
     public override ArrayList<Node>? children() { return single_node(statement); }
     
-    Symbol? lookup(string name, int pos) {
-        return variable.name == name ? variable : null;
+    bool lookup(SymbolSet symbols, int pos) {
+        return symbols.add(variable);
     }    
     
     protected override void print(int level) {
@@ -187,18 +271,12 @@ class Chain : Object {
         this.parent = parent;
     }
     
-    public Symbol? lookup(string name, int pos) {
-        Symbol s = scope.lookup(name, pos);
-        if (s != null)
-            return s;
-        return parent == null ? null : parent.lookup(name, pos);
-    }
-    
-    public TypeSymbol? lookup_type(string name) {
-        TypeSymbol s = scope.lookup(name, 0) as TypeSymbol;
-        if (s != null)
-            return s;
-        return parent == null ? null : parent.lookup_type(name);
+    public void lookup(SymbolSet symbols, int pos) {
+        if (scope.lookup(symbols, pos))
+            return;
+
+        if (parent != null)
+            parent.lookup(symbols, pos);
     }
 }
 
@@ -207,15 +285,14 @@ class Block : Statement, Scope {
 
     public override ArrayList<Node>? children() { return statements; }
     
-    Symbol? lookup(string name, int pos) {
+    bool lookup(SymbolSet symbols, int pos) {
         foreach (Statement s in statements) {
             if (s.start > pos)
-                return null;
-            Symbol sym = s.defines_symbol(name);
-            if (sym != null)
-                return sym;
+                return false;
+            if (s.defines_symbol(symbols))
+                return true;
         }
-        return null;
+        return false;
     }
     
     protected override void print(int level) {
@@ -264,9 +341,8 @@ class Method : Symbol, Scope {
     }
     
     public override ArrayList<Node>? children() { return single_node(body);    }
-    
-    Symbol? lookup(string name, int pos) {
-        return Node.lookup_in_array(parameters, name);
+    bool lookup(SymbolSet symbols, int pos) {
+        return Node.lookup_in_array(parameters, symbols);
     }
     
     protected virtual void print_type(int level) {
@@ -346,38 +422,38 @@ class Property : Variable {
 class Class : TypeSymbol, Scope {
     public ArrayList<CompoundName> super = new ArrayList<CompoundName>();
     public ArrayList<Node> members = new ArrayList<Node>();
-    
+
     public Class(string name, SourceFile source) { base(name, source, 0, 0); }
     
     public override ArrayList<Node>? children() { return members; }
     
-    Symbol? lookup1(string name, HashSet<Class> seen) {
-        Symbol sym = Node.lookup_in_array(members, name);
-        if (sym != null)
-            return sym;
+    bool lookup1(SymbolSet symbols, HashSet<Class> seen) {
+        if (Node.lookup_in_array(members, symbols))
+            return true;
 
-        // look in superclasses
-        
+        // Make sure we don't run into an infinite loop if a user makes this mistake:
+        // class Foo : Foo { ...
         seen.add(this);
-        
+
+        // look in superclasses        
         foreach (CompoundName s in super) {
             // We look up the parent class in the scope at (start - 1); that excludes
             // this class itself (but will include the containing sourcefile,
             // even if start == 0.)
-            Class c = source.resolve_type(s, start - 1) as Class;
-            
+            SymbolSet class_set = source.resolve_type(s, start - 1);
+            Class c = class_set.first() as Class;
+
             if (c != null && !seen.contains(c)) {
-                sym = c.lookup1(name, seen);
-                if (sym != null)
-                    return sym;
+                if (c.lookup1(symbols, seen))
+                    return true;
             }
         }
-        return null;
+        return false;
         
     }    
     
-    Symbol? lookup(string name, int pos) {
-        return lookup1(name, new HashSet<Class>());
+    bool lookup(SymbolSet symbols, int pos) {
+        return lookup1(symbols, new HashSet<Class>());
     }
     
     public override void print(int level) {
@@ -407,12 +483,12 @@ class Namespace : TypeSymbol, Scope {
     
     public override ArrayList<Node>? children() { return symbols; }
 
-    public Symbol? lookup(string name, int pos) {
-        return source.program.lookup_in_namespace(full_name, name); 
+    public bool lookup(SymbolSet symbols, int pos) {
+        return source.program.lookup_in_namespace(full_name, symbols);
     }
     
-    public Symbol? lookup1(string name) {
-        return Node.lookup_in_array(symbols, name);
+    public bool lookup1(SymbolSet symbols) {
+        return Node.lookup_in_array(this.symbols, symbols);
     }
 
     public override void print(int level) {
@@ -456,48 +532,66 @@ class SourceFile : Node, Scope {
             return;
         using_namespaces.add(name);
     }
-    
-    Symbol? lookup(string name, int pos) {
+
+    bool lookup(SymbolSet symbols, int pos) {
         foreach (string ns in using_namespaces) {
-            Symbol s = program.lookup_in_namespace(ns, name);
-            if (s != null)
-                return s;
+            if (program.lookup_in_namespace(ns, symbols))
+                return true;
         }
-        return null;
-    }
-    
-    public Symbol? lookup_in_namespace(string? namespace_name, string name) {
-        foreach (Namespace n in namespaces)
-            if (n.full_name == namespace_name) {
-                Symbol s = n.lookup1(name);
-                if (s != null)
-                    return s;
-            }
-        return null;
+        return false;
     }
 
-    public Symbol? resolve1(CompoundName name, Chain chain, int pos, bool find_type) {
+    public bool lookup_in_namespace(string? namespace_name, SymbolSet symbols) {
+        foreach (Namespace n in namespaces)
+            if (n.full_name == namespace_name) {
+                if (n.lookup1(symbols))
+                    return true;
+            }
+        return false;
+    }
+
+    public SymbolSet resolve1(CompoundName name, Chain chain, int pos, bool find_type, bool exact) {
         SimpleName s = name as SimpleName;
-        if (s != null)
-            return find_type ? chain.lookup_type(s.name) : chain.lookup(s.name, pos);
+        if (s != null) {
+            SymbolSet symbols = new SymbolSet(s.name, find_type, exact);
+            chain.lookup(symbols, pos);
+            return symbols;
+        }
         
+        // The basename of a qualified name is always going to be an exact match
         QualifiedName q = (QualifiedName) name;
-        Symbol left = resolve1(q.basename, chain, pos, find_type);
+        SymbolSet left_set = resolve1(q.basename, chain, pos, find_type, true);
+        Symbol left = left_set.first();
         if (!find_type) {
             Variable v = left as Variable;
-            if (v != null)
-                left = v.source.resolve_type(v.type, v.start);
+            if (v != null) {
+                left_set = v.source.resolve_type(v.type, v.start);
+                left = left_set.first();
+            }
         }
         Scope scope = left as Scope;
-        return scope == null ? null : scope.lookup(q.name, 0);
+
+        // It doesn't make sense to be looking up members of a method as a qualified name
+        if (scope is Method)
+            return new SymbolSet("", false, false);
+        
+        SymbolSet symbols = new SymbolSet(q.name, find_type, exact);
+        if (scope != null)
+            scope.lookup(symbols, 0);
+        
+        return symbols;
     }
     
-    public Symbol? resolve(CompoundName name, int pos) {
-        return resolve1(name, find(null, pos), pos, false);
+    public SymbolSet resolve(CompoundName name, int pos) {
+        return resolve1(name, find(null, pos), pos, false, true);
     }    
     
-    public Symbol? resolve_type(CompoundName type, int pos) {
-        return resolve1(type, find(null, pos), 0, true);
+    public SymbolSet resolve_type(CompoundName type, int pos) {
+        return resolve1(type, find(null, pos), 0, true, true);
+    }
+    
+    public SymbolSet resolve_prefix(CompoundName prefix, int pos) {
+        return resolve1(prefix, find(null, pos), pos, false, false);
     }
     
     public override void print(int level) {
@@ -843,26 +937,23 @@ class Program : Object {
                filename.has_suffix(".cs");    // C#
     }
 
-    public Symbol? lookup_in_namespace1(ArrayList<SourceFile> source_list, string? namespace_name, 
-                                        string name, bool vapi) {
+    public bool lookup_in_namespace1(ArrayList<SourceFile> source_list, string? namespace_name, 
+                                        SymbolSet symbols, bool vapi) {
         foreach (SourceFile source in source_list)
             if (source.filename.has_suffix(".vapi") == vapi) {
-                Symbol s = source.lookup_in_namespace(namespace_name, name);
-                if (s != null)
-                    return s;
+                if (source.lookup_in_namespace(namespace_name, symbols))
+                    return true;
             }
-        return null;
+        return false;
     }
 
-    public Symbol? lookup_in_namespace(string? namespace_name, string name) {
+    public bool lookup_in_namespace(string? namespace_name, SymbolSet symbols) {
         // First look in non-vapi files; we'd like definitions here to have precedence.
-        Symbol s = lookup_in_namespace1(sources, namespace_name, name, false);
-        if (s == null) {
-            s = lookup_in_namespace1(sources, namespace_name, name, true);   // look in .vapi files
-            if (s == null)
-                s = lookup_in_namespace1(system_sources, namespace_name, name, true);
-        }
-        return s;
+        if (!lookup_in_namespace1(sources, namespace_name, symbols, false))
+            if (!lookup_in_namespace1(sources, namespace_name, symbols, true)); // .vapi files
+                if (!lookup_in_namespace1(system_sources, namespace_name, symbols, true))
+                    return false;
+        return true;
     }    
 
     SourceFile? find_source1(string path, ArrayList<SourceFile> source_list) {

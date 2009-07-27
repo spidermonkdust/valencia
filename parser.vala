@@ -523,12 +523,14 @@ class Parser : Object {
         return null;
     }
 
-    public CompoundName? method_at(string input, int pos, out int final_pos) {
+    public CompoundName? method_at(string input, int pos, out int final_pos, 
+                                   out CompoundName name_at_cursor) {
         Stack<Pair<int, CompoundName>> stack = new Stack<Pair<int, CompoundName>>();
         int free_left_parens = 0;
 
         scanner = new Scanner(input);
         while (scanner.end < pos) {
+            name_at_cursor = null;
             Token t = scanner.next_token();
             if (t == Token.EOF) {
                 break;
@@ -537,29 +539,42 @@ class Parser : Object {
                 if (stack.size() > 0 && free_left_parens == 0) {
                     stack.pop();
                 } else --free_left_parens;
+                name_at_cursor = null;
             } else if (t == Token.LEFT_PAREN) {
                 ++free_left_parens;
+                name_at_cursor = null;
             } else if (t == Token.ID) {
                 CompoundName name = new SimpleName(scanner.val());
+                if (scanner.end <= pos)
+                    name_at_cursor = name;
                 while (true) {
                     if (scanner.end >= pos) {
                         if (stack.size() > 0) {
                             final_pos = stack.top().first;
                             return stack.top().second;
                         }
-                        
                         return null;
                     }
-                    if (!accept(Token.PERIOD) || !accept(Token.ID))
+
+                    if (!accept(Token.PERIOD))
                         break;
+                    // Include the period operator for member lookups when autocompleting
+                    name_at_cursor = new QualifiedName(name, "");
+                    
+                    if (!accept(Token.ID))
+                        break;
+                    
                     name = new QualifiedName(name, scanner.val());
+                    if (scanner.end <= pos)
+                        name_at_cursor = name;
                 }
                 if (accept(Token.LEFT_PAREN)) {
                     stack.push(new Pair<int, CompoundName>(scanner.start, name));
+                    name_at_cursor = null;
                 }
             }
         }
-        
+       
         if (stack.size() > 0) {
             final_pos = stack.top().first;
             return stack.top().second;
