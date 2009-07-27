@@ -1121,14 +1121,18 @@ class Program : Object {
     // Tries to find a full path for a filename that may be a sourcefile (or another file that
     // happens to reside in a sourcefile directory, like a generated .c file)
     public string? get_path_for_filename(string filename) {
-        string basename = Path.get_basename(filename);
+        if (Path.is_absolute(filename))
+            return filename;
+
+        // Search for the best partial match possible
         foreach (SourceFile sf in sources) {
-            if (basename == Path.get_basename(sf.filename))
+            if (sf.filename.has_suffix(filename))
                 return sf.filename;
         }
 
         // If no direct match could be made, try searching all directories that the source files
         // are in for a file that matches the basename
+        string basename = Path.get_basename(filename);
         Gee.ArrayList<string> dirs = new ArrayList<string>();
         foreach (SourceFile sf in sources) {
             string dir = Path.get_dirname(sf.filename);
