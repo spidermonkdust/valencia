@@ -221,19 +221,23 @@ class LocalVariable : Variable {
 }
 
 class DeclarationStatement : Statement {
-    public LocalVariable variable;
+    public ArrayList<LocalVariable> variables;
     
-    public DeclarationStatement(LocalVariable variable, int start, int end) {
+    public DeclarationStatement(ArrayList<LocalVariable> variables, int start, int end) {
         base(start, end);
-        this.variable = variable;
+        this.variables = variables;
     }
-    
+
     public override bool defines_symbol(SymbolSet symbols) {
-        return symbols.add(variable);
+        foreach (LocalVariable variable in variables)
+            if (symbols.add(variable))
+                return true;
+        return false;
     }
     
     public override void print(int level) {
-        variable.print(level);
+        foreach (LocalVariable variable in variables)
+            variable.print(level);
     }
 }
 

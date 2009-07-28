@@ -131,7 +131,19 @@ class Parser : Object {
                     return type;
             }
         }
-        skip_expression();
+
+        // Parse struct/array initializers
+        if (peek_token() == Token.LEFT_BRACE) {
+            int depth = 0;
+            // Look for semicolons to handle incorrect syntax better than skipping to the next scope
+            while (!scanner.eof() && peek_token() != Token.SEMICOLON) {
+                if (accept(Token.LEFT_BRACE))
+                    ++depth;
+                else if (accept(Token.RIGHT_BRACE) && --depth == 0)
+                    break;
+                else next_token();
+            }
+        } else skip_expression();
         return null;
     }
     
@@ -153,27 +165,42 @@ class Parser : Object {
         Statement s = parse_statement();
         return new ForEach(v, s, start, scanner.end);
     }
-    
+
+    LocalVariable? parse_local_variable(CompoundName type) {
+        if (!accept(Token.ID))
+            return null;
+
+        string name = scanner.val();
+        LocalVariable v = new LocalVariable(type, name, source, scanner.start, scanner.end);
+        if (accept(Token.EQUALS)) {
+            CompoundName inferred_type = parse_expression();
+            if (v.type.to_string() == "var" && inferred_type != null)
+                v.type = inferred_type;
+        }
+        
+        accept(Token.COMMA);
+        return v;
+    }
+
     Statement? parse_statement() {
         if (accept(Token.FOREACH))
             return parse_foreach();
 
         CompoundName type = parse_type();
-        if (type != null && accept(Token.ID)) {
-            string name = scanner.val();
+        if (type != null && peek_token() == Token.ID) {
             int start = scanner.start;
-            LocalVariable v = new LocalVariable(type, name, source, start, scanner.end);
-            if (accept(Token.EQUALS)) {
-                type = parse_expression();
-                if (v.type.to_string() == "var" && type != null)
-                    v.type = type;
-                // If this expression was an array or struct initializer, make sure to complete it
-                accept(Token.RIGHT_BRACE);
+            ArrayList<LocalVariable> variables = new ArrayList<LocalVariable>();
+
+            LocalVariable? v = parse_local_variable(type);
+            while (v != null) {
+                variables.add(v);
+                v = parse_local_variable(type);
             }
+
             if (accept(Token.SEMICOLON))
-                return new DeclarationStatement(v, start, scanner.end);
+                return new DeclarationStatement(variables, start, scanner.end);
         }
-        
+
         // We found no declaration.  Scan through the remainder of the
         // statement, looking for an embedded block.
         while (true) {
