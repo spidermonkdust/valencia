@@ -1127,14 +1127,14 @@ class Instance : Object {
         int pos;
         get_buffer_str_and_pos(filename, out source, out pos);
 
-        CompoundName name = new Parser().name_at(source, pos); 
+        bool in_new;
+        CompoundName name = new Parser().name_at(source, pos, out in_new); 
         if (name == null)
             return;
 
         Program program = Program.find_containing(filename);
         SourceFile sf = program.find_source(filename);
-        SymbolSet symbols = sf.resolve(name, pos);
-        Symbol? sym = symbols.first();
+        Symbol? sym = sf.resolve(name, pos, in_new);
         if (sym == null)
             return;
 
@@ -1146,7 +1146,10 @@ class Instance : Object {
         browsing_history = false;
 
         SourceFile dest = sym.source;
-        jump(dest.filename, new CharRange(sym.start, sym.start + (int) sym.name.length));
+        if (sym.name == null)
+            jump(dest.filename, new CharRange(sym.start, sym.start + (int) name.to_string().length));
+        else
+            jump(dest.filename, new CharRange(sym.start, sym.start + (int) sym.name.length));
     }
 
     void on_go_back() {
@@ -1537,7 +1540,8 @@ class Instance : Object {
         weak string source;
         get_buffer_str_and_pos(filename, out source, out cursor_pos); 
 
-        name = new Parser().method_at(source, cursor_pos, out method_pos, out name_at_cursor);
+        bool in_new;
+        name = new Parser().method_at(source, cursor_pos, out method_pos, out name_at_cursor, out in_new);
 
         Program program = Program.find_containing(filename);
         SourceFile sf = program.find_source(filename);
@@ -1545,8 +1549,7 @@ class Instance : Object {
         // Give the method tooltip precedence over autocomplete
         method = null;
         if (name != null && (!tip.is_visible() || cursor_is_inside_different_function(method_pos))) {
-            SymbolSet symbol_set = sf.resolve(name, cursor_pos);
-            Symbol sym = symbol_set.first();
+            Symbol? sym = sf.resolve(name, cursor_pos, in_new);
             if (sym != null)
                 method = sym as Method; 
         }

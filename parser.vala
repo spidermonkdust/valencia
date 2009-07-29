@@ -178,7 +178,6 @@ class Parser : Object {
                 v.type = inferred_type;
         }
         
-        accept(Token.COMMA);
         return v;
     }
 
@@ -195,6 +194,8 @@ class Parser : Object {
             while (v != null) {
                 variables.add(v);
                 v = parse_local_variable(type);
+                if (!accept(Token.COMMA))
+                    break;
             }
 
             if (accept(Token.SEMICOLON))
@@ -278,7 +279,13 @@ class Parser : Object {
             return null;
         }
         if (peek_token() == Token.LEFT_PAREN && type.to_string() == enclosing_class)
-            return parse_method(new Constructor(source), input);
+            return parse_method(new Constructor(null, source), input);
+        // Parse named constructors
+        else if (type is QualifiedName) {
+            QualifiedName qualified_type = type as QualifiedName;
+            if (qualified_type.basename.to_string() == enclosing_class)
+                return parse_method(new Constructor(qualified_type.name, source), input);
+        }
         if (!accept(Token.ID)) {
             skip();
             return null;
@@ -528,7 +535,7 @@ class Parser : Object {
         source.top.end = scanner.end;
     }
 
-    public CompoundName? name_at(string input, int pos) {
+    public CompoundName? name_at(string input, int pos, out bool in_new) {
         scanner = new Scanner(input);
         while (scanner.end < pos) {
             Token t = scanner.next_token();
@@ -536,6 +543,8 @@ class Parser : Object {
                 break;
             if (t == Token.THIS) // the name could be a member of a class
                 accept(Token.PERIOD);
+            else if (t == Token.NEW)
+                in_new = true;
             else if (t == Token.ID) {
                 CompoundName name = new SimpleName(scanner.val());
                 while (true) {
@@ -545,13 +554,17 @@ class Parser : Object {
                         break;
                     name = new QualifiedName(name, scanner.val());
                 }
+            } else {
+                in_new = false;
             }
         }
+
+        in_new = false;
         return null;
     }
 
     public CompoundName? method_at(string input, int pos, out int final_pos, 
-                                   out CompoundName name_at_cursor) {
+                                   out CompoundName name_at_cursor, out bool in_new) {
         Stack<Pair<int, CompoundName>> stack = new Stack<Pair<int, CompoundName>>();
         int free_left_parens = 0;
 
@@ -570,6 +583,8 @@ class Parser : Object {
             } else if (t == Token.LEFT_PAREN) {
                 ++free_left_parens;
                 name_at_cursor = null;
+            } else if (t == Token.NEW) {
+                in_new = true;
             } else if (t == Token.ID) {
                 CompoundName name = new SimpleName(scanner.val());
                 if (scanner.end <= pos)
@@ -585,9 +600,10 @@ class Parser : Object {
 
                     if (!accept(Token.PERIOD))
                         break;
+
                     // Include the period operator for member lookups when autocompleting
                     name_at_cursor = new QualifiedName(name, "");
-                    
+
                     if (!accept(Token.ID))
                         break;
                     
@@ -599,7 +615,7 @@ class Parser : Object {
                     stack.push(new Pair<int, CompoundName>(scanner.start, name));
                     name_at_cursor = null;
                 }
-            }
+            } else in_new = false;
         }
        
         if (stack.size() > 0) {
@@ -607,6 +623,7 @@ class Parser : Object {
             return stack.top().second;
         }
         
+        in_new = false;
         return null;
     }
 

@@ -68,6 +68,10 @@ class SymbolSet : Object {
 
         return exact;
     }
+    
+    public void clear() {
+        symbols.clear();
+    }
 
     // Convenience function for getting the first element without having to use iterators.
     // This is mostly for users expecting exact matches.
@@ -136,7 +140,7 @@ abstract class Node : Object {
                     return n.find(c, pos);
         return c;
     }
-    
+
     public static bool lookup_in_array(ArrayList<Node> a, SymbolSet symbols) {
         foreach (Node n in a) {
             Symbol s = n as Symbol;
@@ -169,7 +173,7 @@ abstract class Symbol : Node {
 
     public static uint hash(void *item) {
         weak Symbol symbol = (Symbol) item;
-        return symbol.name.hash();
+        return (symbol.name != null) ? symbol.name.hash() : 0;
     }
 
     public static bool equal(void* a, void* b) {
@@ -387,7 +391,9 @@ class Method : Symbol, Scope {
 }
 
 class Constructor : Method {
-    public Constructor(SourceFile source) { base(null, source); }
+    public Constructor(string? unqualified_name, SourceFile source) { 
+        base(unqualified_name, source); 
+    }
     
     public override void print_type(int level) {
         do_print(level, "constructor");
@@ -430,6 +436,17 @@ class Class : TypeSymbol, Scope {
     public Class(string name, SourceFile source) { base(name, source, 0, 0); }
     
     public override ArrayList<Node>? children() { return members; }
+    
+    public Symbol? lookup_constructor() {
+        foreach (Node n in members) {
+            Constructor c = n as Constructor;
+            // Don't accept named constructors
+            if (c != null && c.name == null) {
+                return (Symbol) c;
+            }
+        }
+        return null;
+    }
     
     bool lookup1(SymbolSet symbols, HashSet<Class> seen) {
         if (Node.lookup_in_array(members, symbols))
@@ -586,8 +603,21 @@ class SourceFile : Node, Scope {
         return symbols;
     }
     
-    public SymbolSet resolve(CompoundName name, int pos) {
-        return resolve1(name, find(null, pos), pos, false, true);
+    public Symbol? resolve(CompoundName name, int pos, bool constructor) {
+        SymbolSet symbols = resolve1(name, find(null, pos), pos, false, true);
+        Symbol s = symbols.first();
+
+        if (constructor) {
+            Class c = s as Class;
+            if (c != null) {
+                symbols.clear();
+                s = c.lookup_constructor();
+            // Don't return a symbol that isn't a constructor if it is supposed to be one
+            } else if (!(s is Constructor))
+                return null;
+        }
+        
+        return s;
     }    
     
     public SymbolSet resolve_type(CompoundName type, int pos) {
