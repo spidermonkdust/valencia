@@ -142,6 +142,18 @@ class CharRange : Destination {
     }    
 }
 
+class ScanScope : Object {
+    public int depth;
+    public int start_pos;
+    public int end_pos;
+    
+    public ScanScope(int depth, int start_pos, int end_pos) {
+        this.depth = depth;
+        this.start_pos = start_pos;
+        this.end_pos = end_pos;
+    }
+}
+
 class AutocompleteDialog : Object {
     weak Gedit.Window parent;
     Gtk.Window window;
@@ -419,9 +431,10 @@ class Instance : Object {
     public Gedit.Window window;
     Plugin plugin;
     Program last_program_to_build;
-        
+
     Gtk.ActionGroup action_group;
     Gtk.MenuItem go_to_definition_menu_item;
+    Gtk.MenuItem go_to_enclosing_method_or_class_menu_item;
     Gtk.MenuItem go_back_menu_item;
     Gtk.MenuItem go_forward_menu_item;
     Gtk.MenuItem next_error_menu_item;
@@ -469,10 +482,16 @@ class Instance : Object {
 
     // Signal handlers
     GLib.SList<Pair<weak GLib.Object, ulong>> signal_handler_list;
-
+    
+    // Display enclosing class in statusbar
+    int old_cursor_offset;
+    
+    // Menu item entries
     const Gtk.ActionEntry[] entries = {
         { "SearchGoToDefinition", null, "Go to _Definition", "F12",
           "Jump to a symbol's definition", on_go_to_definition },
+        { "SearchGoToEnclosingMethod", null, "Go to enclosing _method or class", "<ctrl>F12",
+          "Jump to the enclosing method or class", on_go_to_enclosing_method_or_class },
         { "SearchGoBack", Gtk.STOCK_GO_BACK, "Go _Back", "<alt>Left",
           "Go back after jumping to a definition", on_go_back },
         { "SearchGoForward", Gtk.STOCK_GO_FORWARD, "Go F_orward", "<alt>Right",
@@ -498,6 +517,7 @@ class Instance : Object {
             <menu name="SearchMenu" action="Search">
               <placeholder name="SearchOps_8">
                 <menuitem name="SearchGoToDefinitionMenu" action="SearchGoToDefinition"/>
+                <menuitem name="SearchGoToEnclosingMethodMenu" action="SearchGoToEnclosingMethod"/>
                 <menuitem name="SearchGoBackMenu" action="SearchGoBack"/>
                 <menuitem name="SearchGoForwardMenu" action="SearchGoForward"/>
                 <separator/>
@@ -520,7 +540,7 @@ class Instance : Object {
     public Instance(Gedit.Window window, Plugin plugin) {
         this.window = window;
         this.plugin = plugin;
-        
+
         if (history == null)
             history = new ArrayList<Gtk.TextMark>();
 
@@ -530,12 +550,12 @@ class Instance : Object {
 
         // Output pane
         output_buffer = new Gtk.TextBuffer(null);
-        
+
         error_tag = output_buffer.create_tag("error", "foreground", "#c00");
         italic_tag = output_buffer.create_tag("italic", "style", Pango.Style.OBLIQUE);
         bold_tag = output_buffer.create_tag("bold", "weight", Pango.Weight.BOLD);
-        highlight_tag = output_buffer.create_tag("highlight",
-            "foreground", "black", "background", "#abd");
+        highlight_tag = output_buffer.create_tag("highlight", "foreground", "black", "background", 
+                                                 "#abd");
         output_view = new Gtk.TextView.with_buffer(output_buffer);
         output_view.set_editable(false);
         output_view.set_cursor_visible(false);
@@ -547,10 +567,10 @@ class Instance : Object {
         output_pane.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC);
         output_pane.add(output_view);
         output_pane.show_all();
-        
+
         Gedit.Panel panel = window.get_bottom_panel();
         panel.add_item_with_stock_icon(output_pane, "Build", Gtk.STOCK_CONVERT);
-        
+
         // Run pane
         run_terminal = new Vte.Terminal();
         run_terminal.child_exited += on_run_child_exit;
@@ -563,8 +583,10 @@ class Instance : Object {
         
         panel.add_item_with_stock_icon(run_pane, "Run", Gtk.STOCK_EXECUTE);     
         
+        // Enclosing class in statusbar
+        old_cursor_offset = 0;
+        
         // Toolbar menu
-
         Gtk.UIManager manager = window.get_ui_manager();
         
         action_group = new Gtk.ActionGroup("valencia");
@@ -586,6 +608,10 @@ class Instance : Object {
         go_to_definition_menu_item = (Gtk.MenuItem) manager.get_widget(
             "/MenuBar/SearchMenu/SearchOps_8/SearchGoToDefinitionMenu");
         assert(go_to_definition_menu_item != null);
+        
+        go_to_enclosing_method_or_class_menu_item = (Gtk.MenuItem) manager.get_widget(
+            "/MenuBar/SearchMenu/SearchOps_8/SearchGoToEnclosingMethodMenu");
+        assert(go_to_enclosing_method_or_class_menu_item != null);
         
         go_back_menu_item = (Gtk.MenuItem) manager.get_widget(
             "/MenuBar/SearchMenu/SearchOps_8/SearchGoBackMenu");
@@ -654,6 +680,8 @@ class Instance : Object {
 
         instance.add_signal(document, "insert-text", (Callback) text_inserted_callback, true);
         instance.add_signal(document, "delete-range", (Callback) text_deleted_callback, true);
+        instance.add_signal(document, "cursor-moved", (Callback) cursor_moved_callback, true);
+        
         instance.add_signal(tab_view, "focus-out-event", (Callback) focus_off_view_callback);
         instance.add_signal(tab_view, "button-press-event", (Callback) button_press_callback);
     }
@@ -663,9 +691,9 @@ class Instance : Object {
 
         if (document.get_modified()) {
             // We're closing a document without saving changes.  Reparse the symbol tree
-            // from the source file on disk.
+            // from the source file on disk (if the file exists on disk).
             string path = document_filename(document);
-            if (path != null)
+            if (path != null && FileUtils.test(path, FileTest.EXISTS))
                 Program.update_any(path, null);
         }
     }
@@ -679,7 +707,6 @@ class Instance : Object {
         bool handled = false; 
         
         // These will always catch, even with alt and ctrl modifiers
-
         switch(key.keyval) {
             case 0xff1b: // escape
                 if (instance.autocomplete.is_visible())
@@ -733,12 +760,18 @@ class Instance : Object {
             default:
                 break;
         }
+        
         return handled;
     }
 
     static bool focus_off_view_callback(Gedit.View view, Gdk.EventFocus focus, Instance instance) {
         instance.tip.hide();
         instance.autocomplete.hide();
+        
+        // Make sure to display the new enclosing class when switching tabs
+        instance.old_cursor_offset = 0;
+        instance.update_status_bar();
+        
         // Let other handlers catch this event as well
         return false;
     }
@@ -775,10 +808,15 @@ class Instance : Object {
             instance.on_display_tooltip_or_autocomplete();
         }
     }
+    
+    static void cursor_moved_callback(Gedit.Document doc, Instance instance) {
+        instance.update_status_bar();
+    }
 
     static bool button_press_callback(Gedit.View view, Gdk.EventButton event, Instance instance) {
         instance.tip.hide();
         instance.autocomplete.hide();
+
         // Let other handlers catch this event as well
         return false;
     }
@@ -1088,6 +1126,15 @@ class Instance : Object {
         history_index = history.size; // always set the current index to be at the top
     }
     
+    void add_insert_cursor_to_history() {
+        // Make sure the current index is the last element
+        while (history.size > 0 && history.size > history_index)
+            history.remove_at(history.size - 1);
+
+        add_mark_at_insert_to_history();
+        browsing_history = false;
+    }
+    
     void get_buffer_str_and_pos(string filename, out weak string source, out int pos) {
         Program program = Program.find_containing(filename, true);
 
@@ -1137,19 +1184,32 @@ class Instance : Object {
         Symbol? sym = sf.resolve(name, pos, in_new);
         if (sym == null)
             return;
-
-        // Make sure the current index is the last element
-        while (history.size > 0 && history.size > history_index)
-            history.remove_at(history.size - 1);
-
-        add_mark_at_insert_to_history();
-        browsing_history = false;
+            
+        add_insert_cursor_to_history();
 
         SourceFile dest = sym.source;
         if (sym.name == null)
             jump(dest.filename, new CharRange(sym.start, sym.start + (int) name.to_string().length));
         else
             jump(dest.filename, new CharRange(sym.start, sym.start + (int) sym.name.length));
+    }
+    
+    void on_go_to_enclosing_method_or_class() {
+        string? filename = active_filename();
+        if (filename == null || !Program.is_vala(filename))
+            return;
+
+        weak string source;
+        int pos;
+        get_buffer_str_and_pos(filename, out source, out pos);
+
+        ScanScope? scan_scope = new Parser().find_enclosing_scope(source, pos, false);
+        if (scan_scope == null)
+            return;
+        
+        add_insert_cursor_to_history();
+        
+        jump(filename, new CharRange(scan_scope.start_pos, scan_scope.end_pos));
     }
 
     void on_go_back() {
@@ -1438,7 +1498,7 @@ class Instance : Object {
     }
 
 ////////////////////////////////////////////////////////////
-//                    Status bar update                   //
+//                  Progress bar update                   //
 ////////////////////////////////////////////////////////////
 
     void update_parse_dialog(double percentage) {
@@ -1454,6 +1514,62 @@ class Instance : Object {
             parsing_dialog = new ProgressBarDialog(window, "Parsing Vala files");
 
         parsing_dialog.set_percentage(percentage);
+    }
+
+////////////////////////////////////////////////////////////
+//                   Status bar update                    //
+////////////////////////////////////////////////////////////
+
+    bool cursor_moved_outside_old_scope(string buffer, int new_cursor_offset) {
+        int begin_offset;
+        int length;
+
+        if (new_cursor_offset < old_cursor_offset) {
+            begin_offset = new_cursor_offset;
+            length = old_cursor_offset - new_cursor_offset;
+        } else {
+            begin_offset = old_cursor_offset;
+            length = new_cursor_offset - old_cursor_offset;
+        }
+        
+        weak string begin_string = buffer.offset(begin_offset);
+
+        for (int i = 0; i < length; ++i) {
+            unichar c = begin_string.get_char();
+            if (c == '{' || c == '}') {
+                old_cursor_offset = new_cursor_offset;
+                return true;
+            }
+            begin_string = begin_string.next_char();
+        }
+        
+        return false;
+    }
+
+    void update_status_bar() {
+        string? filename = active_filename();
+        if (filename == null || !Program.is_vala(filename))
+            return;
+
+        Gedit.Document document = window.get_active_document();
+        weak string source = buffer_contents(document);
+        Gtk.TextIter insert = get_insert_iter(document);
+        int pos = insert.get_offset();
+        
+        // Don't reparse if the cursor hasn't moved past a '{' or a '}'
+        if (!cursor_moved_outside_old_scope(source, pos))
+            return;
+
+        ScanScope? scan_scope = new Parser().find_enclosing_scope(source, pos, true);
+        string class_name;
+        if (scan_scope == null)
+            class_name = "";
+        else
+            class_name = source.substring(scan_scope.start_pos, 
+                                          scan_scope.end_pos - scan_scope.start_pos);
+        
+        Gtk.Statusbar bar = (Gtk.Statusbar) window.get_statusbar();
+        bar.push(bar.get_context_id("Valencia"), class_name);
     }
 
 ////////////////////////////////////////////////////////////
@@ -1510,7 +1626,7 @@ class Instance : Object {
         if (method != null)
             tip.show(method_name.to_string(), " " + method.to_string() + " ", method_pos);  
     }
-    
+
     void display_autocomplete() {
         Method method;
         CompoundName method_name;
@@ -1518,17 +1634,17 @@ class Instance : Object {
         CompoundName name_at_cursor;
         get_tooltip_and_autocomplete_info(out method, out method_name, out method_pos, 
                                           out cursor_pos, out name_at_cursor);
-                                          
+
         if (name_at_cursor == null)
             name_at_cursor = new SimpleName("");
-        
+
         string? filename = active_filename();
         Program program = Program.find_containing(filename);
         SourceFile sf = program.find_source(filename);
-        
+
         if (cursor_is_inside_word())
             return;
-        
+
         SymbolSet symbol_set = sf.resolve_prefix(name_at_cursor, cursor_pos);
         autocomplete.show(symbol_set);
     }
@@ -1545,6 +1661,9 @@ class Instance : Object {
 
         Program program = Program.find_containing(filename);
         SourceFile sf = program.find_source(filename);
+        // The sourcefile may be null if the file is a vala file but hasn't been saved to disk
+        if (sf == null)
+            return;
 
         // Give the method tooltip precedence over autocomplete
         method = null;
@@ -1589,7 +1708,7 @@ class Instance : Object {
             
         return left_parens != 0;
     }
-    
+
     bool cursor_is_inside_word() {
         Gedit.Document document = window.get_active_document();
         Gtk.TextMark insert_mark = document.get_insert();

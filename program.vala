@@ -877,6 +877,10 @@ class Program : Object {
     // Takes the next vala file in the sources path list and parses it. Returns true if there are
     // more files to parse, false if there are not.
     bool parse_vala_file(ArrayList<SourceFile> source_list) {
+        if (sourcefile_paths.size == 0) {
+            return false;
+		}
+		
         string path = sourcefile_paths.get(parse_list_index);
 
         // The index is incremented here because if an error happens, we want to skip this file

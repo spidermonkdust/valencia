@@ -627,6 +627,74 @@ class Parser : Object {
         return null;
     }
 
+    // interfaces/classes/structs/enums, and methods count as enclosing scopes
+    // classes and methods count as enclosing scopes
+    public ScanScope? find_enclosing_scope(string input, int pos, bool classes_only) {
+        scanner = new Scanner(input);
+
+        Stack<ScanScope> scopes = new Stack<ScanScope>();
+        int depth = 0;
+        bool token_is_class = false;
+        bool token_is_namespace = false;
+        
+        while (scanner.end < pos) {
+            Token t = next_token();
+            if (t == Token.EOF)
+                break;
+            if (t == Token.CLASS)
+                token_is_class = true;
+            else if (t == Token.NAMESPACE)
+                token_is_namespace = true;
+            else if (t == Token.LEFT_BRACE)
+                ++depth;
+            else if (t == Token.RIGHT_BRACE) {
+                --depth;
+                if (scopes.size() > 0 && scopes.top().depth == depth && scanner.end < pos)
+                    scopes.pop();
+            // Don't bother looking at the token if it's classes only and the token isn't a class
+            } else if (t == Token.ID && ((!classes_only && !token_is_class) || token_is_class)) {
+                int position = scanner.start;
+                while (true) {
+                    if (scanner.end >= pos)
+                        return (scopes.size() > 0) ? scopes.top() : null;
+                    if (!accept(Token.PERIOD) || !accept(Token.ID))
+                        break;
+                }
+                int end = scanner.end;
+
+                if (!classes_only && peek_token() == Token.LEFT_PAREN) {
+                    // skip to the end of the method declaration to check for a left brace
+                    int unmatched_parens = 0;
+                    while (scanner.end < pos) {
+                        t = next_token();
+                        if (t == Token.SEMICOLON)
+                            break;
+                        else if (t == Token.LEFT_PAREN)
+                            ++unmatched_parens;
+                        else if (t == Token.RIGHT_PAREN)
+                            if (--unmatched_parens == 0)
+                                break;
+                    }
+
+                    // Borrow the token_is_class variable temporarily - there's no need to use 
+                    // another variable when this will be reset to false
+                    if (peek_token() == Token.LEFT_BRACE)
+                        token_is_class = true;
+                }
+
+                if (token_is_class || token_is_namespace)
+                    scopes.push(new ScanScope(depth, position, end));
+                token_is_class = false;
+                token_is_namespace = false;
+            } else {
+                token_is_class = false;
+                token_is_namespace = false;
+            }
+        }
+        
+        return (scopes.size() > 0) ? scopes.top() : null;
+    }
+
 }
 
 void main(string[] args) {

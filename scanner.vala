@@ -18,11 +18,11 @@ enum Token {
     // punctuation
     ASTERISK, LEFT_BRACE, RIGHT_BRACE, LEFT_BRACKET, RIGHT_BRACKET, COLON, COMMA, EQUALS, ELLIPSIS,
     HASH, LEFT_PAREN, RIGHT_PAREN, PERIOD, QUESTION_MARK, SEMICOLON, LESS_THAN, GREATER_THAN,
-    
+
     // keywords
-    ABSTRACT, CLASS, CONST, CONSTRUCT, DELEGATE, ENUM, EXTERN, FOREACH, INLINE, INTERFACE, INTERNAL,
-    NAMESPACE, NEW, OUT, OVERRIDE, OWNED, PRIVATE, PROTECTED, PUBLIC, REF, RETURN, SIGNAL, STATIC,
-    STRUCT, THIS, UNOWNED, USING, VIRTUAL, WEAK
+    ABSTRACT, CLASS, CONST, CONSTRUCT, DELEGATE, ENUM, EXTERN, FOREACH, IF, INLINE, INTERFACE,
+    INTERNAL, NAMESPACE, NEW, OUT, OVERRIDE, OWNED, PRIVATE, PROTECTED, PUBLIC, REF, RETURN, SIGNAL,
+    STATIC, STRUCT, THIS, UNOWNED, USING, VIRTUAL, WEAK, WHILE
 }
 
 struct Keyword {
@@ -39,6 +39,7 @@ const Keyword[] keywords = {
     { "enum", Token.ENUM },
     { "extern", Token.EXTERN },
     { "foreach", Token.FOREACH },
+    { "if", Token.IF },
     { "inline", Token.INLINE },
     { "interface", Token.INTERFACE },
     { "internal", Token.INTERNAL },
@@ -59,7 +60,8 @@ const Keyword[] keywords = {
     { "unowned", Token.UNOWNED },
     { "using", Token.USING },
     { "virtual", Token.VIRTUAL },
-    { "weak", Token.WEAK }
+    { "weak", Token.WEAK },
+    { "while", Token.WHILE }
 };
 
 class Scanner : Object {
