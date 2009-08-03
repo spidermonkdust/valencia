@@ -576,6 +576,7 @@ class Instance : Object {
     Gtk.ScrolledWindow run_pane;
     Vte.Terminal run_terminal;
     
+    // Error pane 
     Regex error_regex;
     
     string target_filename;
@@ -1339,7 +1340,7 @@ class Instance : Object {
         --history_index;
         scroll_to_history_index();
     }
-    
+
     void on_go_forward() {
         if (history.size == 0 || history_index >= history.size)
             return;
@@ -1353,16 +1354,11 @@ class Instance : Object {
         assert(!mark.get_deleted());
         
         Gedit.Document buffer = (Gedit.Document) mark.get_buffer();
+        string filename = document_filename(buffer);
         Gtk.TextIter iter;
         buffer.get_iter_at_mark(out iter, mark);
-        buffer.place_cursor(iter);
-        
-        Gedit.Tab tab = Gedit.Tab.get_from_document(buffer);
-        Gedit.Window window = (Gedit.Window) tab.get_toplevel();
-        window.set_active_tab(tab);
-        window.present();
-
-        scroll_tab_to_iter(tab, iter);
+        int offset = iter.get_offset();
+        jump(filename, new CharRange(offset, offset));
     }
 
     bool can_go_back() {
