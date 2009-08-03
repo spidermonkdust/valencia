@@ -221,11 +221,6 @@ class ProgressBarDialog : Gtk.Window {
     
     public void set_percentage(double percent) {
         bar.set_fraction(percent);
-
-        show();
-        bar.queue_draw();        
-        this.queue_draw();
-        this.window.process_updates(true);
     }
     
     public void close() {

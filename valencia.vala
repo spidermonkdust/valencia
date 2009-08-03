@@ -215,15 +215,114 @@ class AutocompleteDialog : Object {
         dialog.select_item();
     }
 
+    unowned string? get_completion_target(Gtk.TextBuffer buffer) {
+        Gtk.TextIter start = get_insert_iter(buffer);
+        Gtk.TextIter end = start;
+        
+        while (true) {
+            start.backward_char();
+            unichar c = start.get_char();
+            if (!c.isalnum() && c != '.')
+                break;
+        }
+        // Only include characters in the ID name
+        start.forward_char();
+        
+        if (start.get_offset() == end.get_offset())
+            return null;
+        
+        return start.get_slice(end);
+    }
+    
+    string strip_completed_classnames(string list_name, string completion_target) {
+        string[] classnames = completion_target.split(".");
+        int names = classnames.length;
+        // If the last classname is not part explicitly part of the class qualification, then it 
+        // should not be removed from the completion suggestion's name
+        if (!completion_target.has_suffix("."))
+            --names;
+            
+        for (int i = 0; i < names; ++i) {
+            weak string name = classnames[i];
+            
+            // If the name doesn't contain the current classname, then it won't contain the rest
+            if (list_name.contains(name)) {
+                // Add one to the offset of a string to account for the "."
+                long offset = name.length;
+                if (offset > 0)
+                    ++offset;
+                list_name = list_name.offset(offset);
+            } else break;
+        }
+        return list_name;
+    }
+
+    string parse_single_symbol(Symbol symbol, string? completion_target, bool constructor) {
+        string list_name = "";
+        
+        if (constructor) {
+            // Get the fully-qualified constructor name
+            Constructor c = symbol as Constructor;
+            assert(c != null);
+
+            list_name = c.parent.to_string();
+            
+            if (c.name != null)
+                list_name += "." + c.name;
+            list_name += "()";
+
+            // If the user hasn't typed anything or if either the completion string or this 
+            // constructor is not qualified, keep the original name
+            if (completion_target != null && completion_target.contains(".") 
+                && list_name.contains("."))
+                list_name = strip_completed_classnames(list_name, completion_target);
+            
+        } else {
+            list_name = symbol.name;
+            if (symbol is Method)
+                list_name = symbol.name + "()";
+        }
+        
+        return list_name;
+    }
+
+    string[]? parse_symbol_names(HashSet<Symbol>? symbols) {
+        if (symbols == null)
+            return null;
+            
+        string[] list = new string[symbols.size];
+
+        // If the first element is a constructor, all elements will be constructors
+        Iterator<Symbol> iter = symbols.iterator();
+        iter.next();
+        bool constructor = iter.get() is Constructor;
+
+        // match the extent of what the user has already typed with named constructors
+        string? completion_target = null;
+        if (constructor) {          
+            completion_target = get_completion_target(parent.get_active_document());
+        }
+
+        int i = 0;
+        foreach (Symbol symbol in symbols) {
+            list[i] = parse_single_symbol(symbol, completion_target, constructor);
+            ++i;
+        }
+            
+        qsort(list, symbols.size, sizeof(string), compare_string);
+        return list;
+    }
+
     public void show(SymbolSet symbol_set) {
         list.clear();
         visible = true;
         partial_name = symbol_set.get_name();
 
-       string[] symbols = symbol_set.get_symbols();
+       HashSet<Symbol>? symbols = symbol_set.get_symbols();
+       string[]? symbol_strings = parse_symbol_names(symbols);
 
-        if (symbols != null) {
-            foreach (string s in symbols) {
+        if (symbol_strings != null) {
+            foreach (string s in symbol_strings) {
                 Gtk.TreeIter iterator;
                 list.append(out iterator);
                 list.set(iterator, 0, s, -1);
@@ -292,7 +391,7 @@ class AutocompleteDialog : Object {
         treeview.get_cursor(out path, out column);
         return path;
     }
-
+    
     public Gtk.TreePath select_first_cell() {
         Gtk.TreePath start = new Gtk.TreePath.first();
         select(start);
@@ -388,9 +487,21 @@ class AutocompleteDialog : Object {
         list.get_value(iter, 0, out v);
 
         weak string selection = v.get_string();
-        string completed = selection.substring(partial_name.length);
 
-        long offset = (selection.has_suffix(")")) ? 1 : 0;
+        // delete the rest of the string at cursor
+        Gtk.TextIter start = get_insert_iter(buffer);
+        Gtk.TextIter end = start;
+        while (true) {
+            unichar c = end.get_char();
+            if (!c.isalnum() && c != '_' && c != '.' && c != '(')
+                break;
+            if (!end.forward_char())
+                break;
+        }
+        buffer.delete(start, end);
+
+        string completed = selection.substring(partial_name.length);    
+        long offset = selection.has_suffix(")") ? 1 : 0;
         buffer.insert_at_cursor(completed, (int) (completed.length - offset));
 
         hide();
@@ -1594,8 +1705,9 @@ class Instance : Object {
         CompoundName method_name;
         int method_pos, cursor_pos;
         CompoundName name_at_cursor;
+        bool in_new;
         get_tooltip_and_autocomplete_info(out method, out method_name, out method_pos, 
-                                          out cursor_pos, out name_at_cursor);
+                                          out cursor_pos, out name_at_cursor, out in_new);
 
         if (method != null)
             tip.show(method_name.to_string(), " " + method.to_string() + " ", method_pos);  
@@ -1607,10 +1719,7 @@ class Instance : Object {
             Program program = Program.find_containing(filename);
             SourceFile sf = program.find_source(filename);
             
-            if (cursor_is_inside_word())
-                return;
-            
-            SymbolSet symbol_set = sf.resolve_prefix(name_at_cursor, cursor_pos);
+            SymbolSet symbol_set = sf.resolve_prefix(name_at_cursor, cursor_pos, in_new);
             autocomplete.show(symbol_set);
         }
     }
@@ -1620,8 +1729,9 @@ class Instance : Object {
         CompoundName method_name;
         int method_pos, cursor_pos;
         CompoundName name_at_cursor;
+        bool in_new;
         get_tooltip_and_autocomplete_info(out method, out method_name, out method_pos, 
-                                          out cursor_pos, out name_at_cursor);
+                                          out cursor_pos, out name_at_cursor, out in_new);
 
         if (method != null)
             tip.show(method_name.to_string(), " " + method.to_string() + " ", method_pos);  
@@ -1632,8 +1742,9 @@ class Instance : Object {
         CompoundName method_name;
         int method_pos, cursor_pos;
         CompoundName name_at_cursor;
+        bool in_new;
         get_tooltip_and_autocomplete_info(out method, out method_name, out method_pos, 
-                                          out cursor_pos, out name_at_cursor);
+                                          out cursor_pos, out name_at_cursor, out in_new);
 
         if (name_at_cursor == null)
             name_at_cursor = new SimpleName("");
@@ -1642,21 +1753,18 @@ class Instance : Object {
         Program program = Program.find_containing(filename);
         SourceFile sf = program.find_source(filename);
 
-        if (cursor_is_inside_word())
-            return;
+        SymbolSet symbol_set = sf.resolve_prefix(name_at_cursor, cursor_pos, in_new);
 
-        SymbolSet symbol_set = sf.resolve_prefix(name_at_cursor, cursor_pos);
         autocomplete.show(symbol_set);
     }
 
     void get_tooltip_and_autocomplete_info(out Method? method, out CompoundName? name,
                                            out int method_pos, out int cursor_pos,
-                                           out CompoundName? name_at_cursor) {
+                                           out CompoundName? name_at_cursor, out bool in_new) {
         string? filename = active_filename();
         weak string source;
         get_buffer_str_and_pos(filename, out source, out cursor_pos); 
 
-        bool in_new;
         name = new Parser().method_at(source, cursor_pos, out method_pos, out name_at_cursor, out in_new);
 
         Program program = Program.find_containing(filename);
@@ -1707,15 +1815,6 @@ class Instance : Object {
         }
             
         return left_parens != 0;
-    }
-
-    bool cursor_is_inside_word() {
-        Gedit.Document document = window.get_active_document();
-        Gtk.TextMark insert_mark = document.get_insert();
-        Gtk.TextIter insert_iter;
-        document.get_iter_at_mark(out insert_iter, insert_mark);
-        
-        return insert_iter.get_char().isalnum();
     }
 
 ////////////////////////////////////////////////////////////

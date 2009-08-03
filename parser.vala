@@ -271,20 +271,23 @@ class Parser : Object {
         return m;
     }
 
-    Symbol? parse_method_or_field(string? enclosing_class) {
+    Symbol? parse_method_or_field(Class? enclosing_class) {
         weak string input = scanner.get_start_after_comments();
         CompoundName type = parse_type();
         if (type == null) {
             skip();
             return null;
         }
-        if (peek_token() == Token.LEFT_PAREN && type.to_string() == enclosing_class)
-            return parse_method(new Constructor(null, source), input);
-        // Parse named constructors
-        else if (type is QualifiedName) {
-            QualifiedName qualified_type = type as QualifiedName;
-            if (qualified_type.basename.to_string() == enclosing_class)
-                return parse_method(new Constructor(qualified_type.name, source), input);
+        
+        if (enclosing_class != null) {
+            if (peek_token() == Token.LEFT_PAREN && type.to_string() == enclosing_class.name)
+                return parse_method(new Constructor(null, enclosing_class, source), input);
+            // Parse named constructors
+            else if (type is QualifiedName) {
+                QualifiedName qualified_type = type as QualifiedName;
+                if (qualified_type.basename.to_string() == enclosing_class.name)
+                    return parse_method(new Constructor(qualified_type.name, enclosing_class, source), input);
+            }
         }
         if (!accept(Token.ID)) {
             skip();
@@ -355,7 +358,7 @@ class Parser : Object {
         return b == null ? null : new Construct(b, start, scanner.end);
     }
 
-    Node? parse_member(string? enclosing_class) {
+    Node? parse_member(Class? enclosing_class) {
         skip_attributes();
         skip_modifiers();
         Token t = peek_token();
@@ -372,7 +375,7 @@ class Parser : Object {
             case Token.STRUCT:
             case Token.ENUM:
                 next_token();
-                return parse_class(t == Token.ENUM);
+                return parse_class(t == Token.ENUM, enclosing_class);
             case Token.CONSTRUCT:
                 return parse_construct();
             default:
@@ -380,13 +383,13 @@ class Parser : Object {
         }
     }
 
-    Namespace? parse_containing_namespace(string name, bool is_enum) {
+    Namespace? parse_containing_namespace(string name, bool is_enum, Class? enclosing_class) {
         Namespace n = open_namespace(name);
 
         Namespace parent = current_namespace;
         current_namespace = n;
-        
-        TypeSymbol inner = parse_class(is_enum);
+
+        TypeSymbol inner = parse_class(is_enum, enclosing_class);
         if (inner == null)
             n = null;
         else {
@@ -398,7 +401,7 @@ class Parser : Object {
         return n;
     }
 
-    TypeSymbol? parse_class(bool is_enum) {
+    TypeSymbol? parse_class(bool is_enum, Class? enclosing_class) {
         if (!accept(Token.ID)) {
             skip();
             return null;
@@ -406,9 +409,9 @@ class Parser : Object {
         string name = scanner.val();
         
         if (accept(Token.PERIOD))
-            return parse_containing_namespace(name, is_enum);
+            return parse_containing_namespace(name, is_enum, enclosing_class);
 
-        Class cl = new Class(name, source);
+        Class cl = new Class(name, source, enclosing_class);
         cl.start = scanner.start;
         
         // Make sure to discard any generic qualifiers
@@ -449,7 +452,7 @@ class Parser : Object {
         }
         
         while (!scanner.eof() && !accept(Token.RIGHT_BRACE)) {
-            Node n = parse_member(name);
+            Node n = parse_member(cl);
             if (n != null)
                 cl.members.add(n);
         }
@@ -554,9 +557,7 @@ class Parser : Object {
                         break;
                     name = new QualifiedName(name, scanner.val());
                 }
-            } else {
-                in_new = false;
-            }
+            } else in_new = false;
         }
 
         in_new = false;
@@ -589,6 +590,10 @@ class Parser : Object {
                 CompoundName name = new SimpleName(scanner.val());
                 if (scanner.end <= pos)
                     name_at_cursor = name;
+                else if (scanner.start < pos) {
+                    string partial = scanner.val_from_start_to_offset(pos - scanner.start);
+                    name_at_cursor = new SimpleName(partial);
+                }
                 while (true) {
                     if (scanner.end >= pos) {
                         if (stack.size() > 0) {
@@ -606,24 +611,33 @@ class Parser : Object {
 
                     if (!accept(Token.ID))
                         break;
+
+
+                    if (scanner.end > pos && scanner.start < pos) {
+                        string partial = scanner.val_from_start_to_offset(pos - scanner.start);
+                        name_at_cursor = new QualifiedName(name, partial);
+                    }
                     
                     name = new QualifiedName(name, scanner.val());
-                    if (scanner.end <= pos)
+                    
+                    if (scanner.end <= pos) {
                         name_at_cursor = name;
+                    }
+
                 }
                 if (accept(Token.LEFT_PAREN)) {
                     stack.push(new Pair<int, CompoundName>(scanner.start, name));
                     name_at_cursor = null;
                 }
-            } else in_new = false;
+            } else if (scanner.start < pos)
+                in_new = false;
         }
-       
+
         if (stack.size() > 0) {
             final_pos = stack.top().first;
             return stack.top().second;
         }
         
-        in_new = false;
         return null;
     }
 

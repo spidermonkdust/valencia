@@ -37,16 +37,42 @@ class SymbolSet : Object {
     string name;
     bool exact;
     bool type;
+    bool constructor;
 
-    SymbolSet(string name, bool type, bool exact) {
+    SymbolSet(string name, bool type, bool exact, bool constructor) {
         this.name = name;
         this.type = type;
         this.exact = exact;
+        this.constructor = constructor;
         
         // Since the set stores Symbols, but we actually want to hash their (name) strings, we must
         // provide custom hash and equality functions
         symbols.hash_func = Symbol.hash;
         symbols.equal_func = Symbol.equal;
+    }
+
+    void add_constructor(Symbol sym) {
+        Class c = sym as Class;
+        if (c != null) {
+            if (exact) {
+                Symbol? s = c.lookup_constructor();
+                if (s != null)
+                    symbols.add(s);
+                else symbols.add(sym);
+            } else {
+                // Recursively add subclass constructors to the set
+                foreach (Node n in c.members) {
+                    Class subclass = n as Class;
+                    if (subclass != null)
+                        add_constructor(subclass);
+                    else if (n is Constructor)
+                        symbols.add((Symbol) n);
+                }
+            }
+            // Recursively add subclass constructors to the set
+        } else if (sym is Constructor) {
+            symbols.add(sym);
+        }
     }
 
     public bool add(Symbol sym) {
@@ -56,21 +82,20 @@ class SymbolSet : Object {
         if (exact) {
             if (sym.name != name)
                 return false;
-        } else {
-            if (!sym.name.has_prefix(name))
+        } else if (!sym.name.has_prefix(name)) {
                 return false;
         }
 
         if (type && sym as TypeSymbol == null)
             return false;
 
-        symbols.add(sym);
+        if (constructor) {
+            add_constructor(sym);
+        // Don't add constructors to non-constructor sets
+        } else if (!(sym is Constructor))
+            symbols.add(sym);
 
         return exact;
-    }
-    
-    public void clear() {
-        symbols.clear();
     }
 
     // Convenience function for getting the first element without having to use iterators.
@@ -81,25 +106,13 @@ class SymbolSet : Object {
         return null;
     }
 
-    public string[]? get_symbols() {
+    public HashSet<Symbol>? get_symbols() {
         // It doesn't make sense to display the exact match of a partial search if there is only
         // one symbol found that matches perfectly 
         if (symbols.size == 0 || (symbols.size == 1 && !exact && first().name == name))
             return null;
 
-        string[] list = new string[symbols.size];
-
-        // Make sure the user receives the array in a sorted order
-        int i = 0;
-        foreach (Symbol s in symbols) {
-            string list_name = (s is Method) ? s.name + "()" : s.name;
-            list[i] = list_name;
-            ++i;
-        }
-
-        qsort(list, symbols.size, sizeof(string), compare_string);
-        
-        return list;
+        return symbols;
     }
     
     public string get_name() {
@@ -173,7 +186,14 @@ abstract class Symbol : Node {
 
     public static uint hash(void *item) {
         weak Symbol symbol = (Symbol) item;
-        return (symbol.name != null) ? symbol.name.hash() : 0;
+
+        // Unnamed constructors always have null names, so hash their parent class' name
+        if (symbol.name == null) {
+            Constructor c = symbol as Constructor;
+            assert(c != null);
+            return c.parent.name.hash();
+        } else
+            return symbol.name.hash();
     }
 
     public static bool equal(void* a, void* b) {
@@ -391,8 +411,11 @@ class Method : Symbol, Scope {
 }
 
 class Constructor : Method {
-    public Constructor(string? unqualified_name, SourceFile source) { 
+    public weak Class parent;
+
+    public Constructor(string? unqualified_name, Class parent, SourceFile source) { 
         base(unqualified_name, source); 
+        this.parent = parent;
     }
     
     public override void print_type(int level) {
@@ -432,8 +455,12 @@ class Property : Variable {
 class Class : TypeSymbol, Scope {
     public ArrayList<CompoundName> super = new ArrayList<CompoundName>();
     public ArrayList<Node> members = new ArrayList<Node>();
+    weak Class enclosing_class;
 
-    public Class(string name, SourceFile source) { base(name, source, 0, 0); }
+    public Class(string name, SourceFile source, Class? enclosing_class) {
+        base(name, source, 0, 0); 
+        this.enclosing_class = enclosing_class;
+    }
     
     public override ArrayList<Node>? children() { return members; }
     
@@ -489,6 +516,11 @@ class Class : TypeSymbol, Scope {
         foreach (Node n in members)
             n.print(level + 1);
     }
+
+    public string to_string() {
+        return (enclosing_class != null) ? enclosing_class.to_string() + "." + name : name;
+    }
+
 }
 
 // A Namespace is a TypeSymbol since namespaces can be used in type names.
@@ -532,7 +564,7 @@ class SourceFile : Node, Scope {
         this.filename = filename;
         alloc_top();
     }
-    
+
     void alloc_top() {
         top = new Namespace(null, null, this);
         namespaces.add(top);
@@ -571,17 +603,19 @@ class SourceFile : Node, Scope {
         return false;
     }
 
-    public SymbolSet resolve1(CompoundName name, Chain chain, int pos, bool find_type, bool exact) {
+    public SymbolSet resolve1(CompoundName name, Chain chain, int pos, bool find_type, bool exact, 
+                              bool constructor) {
         SimpleName s = name as SimpleName;
         if (s != null) {
-            SymbolSet symbols = new SymbolSet(s.name, find_type, exact);
+            SymbolSet symbols = new SymbolSet(s.name, find_type, exact, constructor);
             chain.lookup(symbols, pos);
             return symbols;
         }
-        
-        // The basename of a qualified name is always going to be an exact match
+
+        // The basename of a qualified name is always going to be an exact match, and never a
+        // constructor
         QualifiedName q = (QualifiedName) name;
-        SymbolSet left_set = resolve1(q.basename, chain, pos, find_type, true);
+        SymbolSet left_set = resolve1(q.basename, chain, pos, find_type, true, false);
         Symbol left = left_set.first();
         if (!find_type) {
             Variable v = left as Variable;
@@ -594,38 +628,26 @@ class SourceFile : Node, Scope {
 
         // It doesn't make sense to be looking up members of a method as a qualified name
         if (scope is Method)
-            return new SymbolSet("", false, false);
+            return new SymbolSet("", false, false, false);
         
-        SymbolSet symbols = new SymbolSet(q.name, find_type, exact);
+        SymbolSet symbols = new SymbolSet(q.name, find_type, exact, constructor);
         if (scope != null)
             scope.lookup(symbols, 0);
         
         return symbols;
     }
-    
-    public Symbol? resolve(CompoundName name, int pos, bool constructor) {
-        SymbolSet symbols = resolve1(name, find(null, pos), pos, false, true);
-        Symbol s = symbols.first();
 
-        if (constructor) {
-            Class c = s as Class;
-            if (c != null) {
-                symbols.clear();
-                s = c.lookup_constructor();
-            // Don't return a symbol that isn't a constructor if it is supposed to be one
-            } else if (!(s is Constructor))
-                return null;
-        }
-        
-        return s;
+    public Symbol? resolve(CompoundName name, int pos, bool constructor) {
+        SymbolSet symbols = resolve1(name, find(null, pos), pos, false, true, constructor);
+        return symbols.first();
     }    
     
     public SymbolSet resolve_type(CompoundName type, int pos) {
-        return resolve1(type, find(null, pos), 0, true, true);
+        return resolve1(type, find(null, pos), 0, true, true, false);
     }
-    
-    public SymbolSet resolve_prefix(CompoundName prefix, int pos) {
-        return resolve1(prefix, find(null, pos), pos, false, false);
+
+    public SymbolSet resolve_prefix(CompoundName prefix, int pos, bool constructor) {
+        return resolve1(prefix, find(null, pos), pos, false, false, constructor);
     }
     
     public override void print(int level) {
@@ -850,13 +872,16 @@ class Program : Object {
             
             cache_source_paths_in_directory(top_directory, recursive_project);
         }
-            
-        if (parse_vala_file(sources))
-            return true;
-        else {
-            finish_local_parse();
-            return false;
+
+        // We can reasonably parse 3 files in one go to take a load off of X11
+        for (int i = 0; i < 3; ++i) {
+            if (!parse_vala_file(sources)) {
+                finish_local_parse();
+                return false;                
+            }
         }
+        
+        return true;
     }
 
     bool parse_system_vala_files_idle_callback() {
@@ -864,14 +889,16 @@ class Program : Object {
             string system_directory = get_system_vapi_directory();
             cache_source_paths_in_directory(system_directory, true);
         }
-            
-        if (parse_vala_file(system_sources))
-            return true;
-        else {
-            parsing = false;
-            system_parse_complete();
-            return false;
+
+        for (int i = 0; i < 3; ++i) {
+            if (!parse_vala_file(system_sources)) {
+                parsing = false;
+                system_parse_complete();
+                return false;
+            }
         }
+
+        return true;
     }
 
     // Takes the next vala file in the sources path list and parses it. Returns true if there are
