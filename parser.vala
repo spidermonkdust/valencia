@@ -127,7 +127,8 @@ class Parser : Object {
                     if (!accept(Token.COMMA))
                         break;
                 }
-                if (accept(Token.RIGHT_PAREN) && peek_token() == Token.SEMICOLON)
+                Token token = peek_token();
+                if (accept(Token.RIGHT_PAREN) && (token == Token.SEMICOLON || token == Token.COMMA))
                     return type;
             }
         }
@@ -146,7 +147,7 @@ class Parser : Object {
         } else skip_expression();
         return null;
     }
-    
+
     ForEach? parse_foreach() {
         int start = scanner.start;
         if (!accept(Token.LEFT_PAREN))
@@ -193,9 +194,9 @@ class Parser : Object {
             LocalVariable? v = parse_local_variable(type);
             while (v != null) {
                 variables.add(v);
-                v = parse_local_variable(type);
                 if (!accept(Token.COMMA))
                     break;
+                v = parse_local_variable(type);
             }
 
             if (accept(Token.SEMICOLON))
