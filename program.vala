@@ -1189,9 +1189,12 @@ class Program : Object {
         if (Path.is_absolute(filename))
             return filename;
 
+        // Make sure the whole basename is matched, not just part of it            
+        string relative_path = (filename.contains("/")) ? filename : "/" + filename;
+        
         // Search for the best partial match possible
         foreach (SourceFile sf in sources) {
-            if (sf.filename.has_suffix(filename))
+            if (sf.filename.has_suffix(relative_path))
                 return sf.filename;
         }
 
