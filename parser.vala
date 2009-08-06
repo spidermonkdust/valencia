@@ -565,10 +565,11 @@ class Parser : Object {
         return null;
     }
 
-    public CompoundName? method_at(string input, int pos, out int final_pos, 
-                                   out CompoundName name_at_cursor, out bool in_new) {
-        Stack<Pair<int, CompoundName>> stack = new Stack<Pair<int, CompoundName>>();
+    public MethodScanInfo? method_at(string input, int pos, out CompoundName? name_at_cursor) {
+        Stack<MethodScanInfo> stack = new Stack<MethodScanInfo>();
         int free_left_parens = 0;
+        bool tooltip_new = false;
+        bool autocomplete_new = false;
 
         scanner = new Scanner(input);
         while (scanner.end < pos) {
@@ -586,7 +587,8 @@ class Parser : Object {
                 ++free_left_parens;
                 name_at_cursor = null;
             } else if (t == Token.NEW) {
-                in_new = true;
+                tooltip_new = true;
+                autocomplete_new = true;
             } else if (t == Token.ID) {
                 CompoundName name = new SimpleName(scanner.val());
                 if (scanner.end <= pos)
@@ -598,10 +600,9 @@ class Parser : Object {
                 while (true) {
                     if (scanner.end >= pos) {
                         if (stack.size() > 0) {
-                            final_pos = stack.top().first;
-                            return stack.top().second;
+                            return stack.top();
                         }
-                        return null;
+                        return new MethodScanInfo(null, 0, tooltip_new, autocomplete_new);
                     }
 
                     if (!accept(Token.PERIOD))
@@ -612,7 +613,6 @@ class Parser : Object {
 
                     if (!accept(Token.ID))
                         break;
-
 
                     if (scanner.end > pos && scanner.start < pos) {
                         string partial = scanner.val_from_start_to_offset(pos - scanner.start);
@@ -627,19 +627,22 @@ class Parser : Object {
 
                 }
                 if (accept(Token.LEFT_PAREN)) {
-                    stack.push(new Pair<int, CompoundName>(scanner.start, name));
+                    autocomplete_new = false;
+                    stack.push(new MethodScanInfo(name, scanner.start, tooltip_new, autocomplete_new));
                     name_at_cursor = null;
+                    tooltip_new = false;
                 }
-            } else if (scanner.start < pos)
-                in_new = false;
+            } else if (scanner.start < pos && t != Token.COMMA) {
+                tooltip_new = false;
+                autocomplete_new = false;
+            }
         }
 
         if (stack.size() > 0) {
-            final_pos = stack.top().first;
-            return stack.top().second;
+            return stack.top();
         }
         
-        return null;
+        return new MethodScanInfo(null, 0, tooltip_new, autocomplete_new);
     }
 
     // interfaces/classes/structs/enums, and methods count as enclosing scopes

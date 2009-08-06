@@ -154,6 +154,21 @@ class ScanScope : Object {
     }
 }
 
+class MethodScanInfo : Object {
+    public CompoundName method_name;
+    public int method_start_position;
+    public bool tooltip_new;
+    public bool autocomplete_new;
+
+    public MethodScanInfo(CompoundName? method_name, int method_start_position, bool tooltip_new, 
+                          bool autocomplete_new) {
+        this.method_name = method_name;
+        this.method_start_position = method_start_position;
+        this.tooltip_new = tooltip_new;
+        this.autocomplete_new = autocomplete_new;
+    }
+}
+
 class AutocompleteDialog : Object {
     weak Gedit.Window parent;
     Gtk.Window window;
@@ -1698,15 +1713,14 @@ class Instance : Object {
 
     void display_tooltip_or_autocomplete() {
         Method method;
-        CompoundName method_name;
-        int method_pos, cursor_pos;
+        MethodScanInfo info;
+        int cursor_pos;
         CompoundName name_at_cursor;
-        bool in_new;
-        get_tooltip_and_autocomplete_info(out method, out method_name, out method_pos, 
-                                          out cursor_pos, out name_at_cursor, out in_new);
+        get_tooltip_and_autocomplete_info(out method, out info, out cursor_pos, out name_at_cursor);
 
         if (method != null)
-            tip.show(method_name.to_string(), " " + method.to_string() + " ", method_pos);  
+            tip.show(info.method_name.to_string(), " " + method.to_string() + " ", 
+                     info.method_start_position);  
         else {
             if (name_at_cursor == null)
                 name_at_cursor = new SimpleName("");
@@ -1715,32 +1729,29 @@ class Instance : Object {
             Program program = Program.find_containing(filename);
             SourceFile sf = program.find_source(filename);
             
-            SymbolSet symbol_set = sf.resolve_prefix(name_at_cursor, cursor_pos, in_new);
+            SymbolSet symbol_set = sf.resolve_prefix(name_at_cursor, cursor_pos, info.autocomplete_new);
             autocomplete.show(symbol_set);
         }
     }
 
     void display_tooltip() {
         Method method;
-        CompoundName method_name;
-        int method_pos, cursor_pos;
+        MethodScanInfo info;
+        int cursor_pos;
         CompoundName name_at_cursor;
-        bool in_new;
-        get_tooltip_and_autocomplete_info(out method, out method_name, out method_pos, 
-                                          out cursor_pos, out name_at_cursor, out in_new);
-
+        get_tooltip_and_autocomplete_info(out method, out info, out cursor_pos, out name_at_cursor);
+    
         if (method != null)
-            tip.show(method_name.to_string(), " " + method.to_string() + " ", method_pos);  
+            tip.show(info.method_name.to_string(), " " + method.to_string() + " ", 
+                     info.method_start_position);  
     }
 
     void display_autocomplete() {
         Method method;
-        CompoundName method_name;
-        int method_pos, cursor_pos;
+        MethodScanInfo info;
+        int cursor_pos;
         CompoundName name_at_cursor;
-        bool in_new;
-        get_tooltip_and_autocomplete_info(out method, out method_name, out method_pos, 
-                                          out cursor_pos, out name_at_cursor, out in_new);
+        get_tooltip_and_autocomplete_info(out method, out info, out cursor_pos, out name_at_cursor);
 
         if (name_at_cursor == null)
             name_at_cursor = new SimpleName("");
@@ -1749,19 +1760,18 @@ class Instance : Object {
         Program program = Program.find_containing(filename);
         SourceFile sf = program.find_source(filename);
 
-        SymbolSet symbol_set = sf.resolve_prefix(name_at_cursor, cursor_pos, in_new);
+        SymbolSet symbol_set = sf.resolve_prefix(name_at_cursor, cursor_pos, info.autocomplete_new);
 
         autocomplete.show(symbol_set);
     }
 
-    void get_tooltip_and_autocomplete_info(out Method? method, out CompoundName? name,
-                                           out int method_pos, out int cursor_pos,
-                                           out CompoundName? name_at_cursor, out bool in_new) {
+    void get_tooltip_and_autocomplete_info(out Method? method, out MethodScanInfo info, 
+                                           out int cursor_pos, out CompoundName? name_at_cursor) {
         string? filename = active_filename();
         weak string source;
         get_buffer_str_and_pos(filename, out source, out cursor_pos); 
 
-        name = new Parser().method_at(source, cursor_pos, out method_pos, out name_at_cursor, out in_new);
+        info = new Parser().method_at(source, cursor_pos, out name_at_cursor);
 
         Program program = Program.find_containing(filename);
         SourceFile sf = program.find_source(filename);
@@ -1771,8 +1781,9 @@ class Instance : Object {
 
         // Give the method tooltip precedence over autocomplete
         method = null;
-        if (name != null && (!tip.is_visible() || cursor_is_inside_different_function(method_pos))) {
-            Symbol? sym = sf.resolve(name, cursor_pos, in_new);
+        if (info.method_name != null && 
+            (!tip.is_visible() || cursor_is_inside_different_function(info.method_start_position))) {
+            Symbol? sym = sf.resolve(info.method_name, cursor_pos, info.tooltip_new);
             if (sym != null)
                 method = sym as Method; 
         }
