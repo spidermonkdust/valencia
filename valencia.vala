@@ -252,23 +252,25 @@ class AutocompleteDialog : Object {
     string strip_completed_classnames(string list_name, string completion_target) {
         string[] classnames = completion_target.split(".");
         int names = classnames.length;
-        // If the last classname is not part explicitly part of the class qualification, then it 
+        // If the last classname is not explicitly part of the class qualification, then it 
         // should not be removed from the completion suggestion's name
         if (!completion_target.has_suffix("."))
             --names;
             
         for (int i = 0; i < names; ++i) {
             weak string name = classnames[i];
-            
-            // If the name doesn't contain the current classname, then it won't contain the rest
+
+            // If the name doesn't contain the current classname, it may be a namespace name that
+            // isn't part of the list_name string - we shouldn't stop the comparison early
             if (list_name.contains(name)) {
                 // Add one to the offset of a string to account for the "."
                 long offset = name.length;
                 if (offset > 0)
                     ++offset;
                 list_name = list_name.offset(offset);
-            } else break;
+            }
         }
+
         return list_name;
     }
 
