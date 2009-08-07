@@ -1,3 +1,13 @@
+Valencia 0.2.0 - August 7, 2009
+-------------------------------
+
+Second release. New features include:
+ * Tooltips displaying method prototypes
+ * Autocomplete for members of method, class, namespace, and global scope
+ * Parses system vapi files
+ * Progress bar while parsing symbols
+ * Many parser bugfixes and enhancements
+
 Valencia 0.1.0 - June 29, 2009
 ------------------------------
 

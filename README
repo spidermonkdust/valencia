@@ -6,7 +6,8 @@ Valencia
 Valencia is a gedit plugin that turns gedit into a lightweight IDE for Vala.
 Using Valencia, you can easily browse between symbols in a Vala program.  You
 can build a Vala program inside gedit and can easily jump to lines with
-build errors.
+build errors. You can also get tooltips for methods and get autocompletion 
+suggestions by invoking autocomplete in the appropriate context.
 
 * Installation & Licensing
 
@@ -27,6 +28,11 @@ to jump to its definition.  Press Alt+Left to return to where the cursor was
 before you pressed F12.  To build your project, choose Project->Build or type
 Shift+Ctrl+B.  To jump to a line with a build error, simply double-click
 the error in the build output.
+
+To get a tooltip for a method, press Ctrl+Space anywhere inside of a method call. 
+To invoke autocomplete on a symbol, press Ctrl+Space on any word. If you are inside
+a method call, and want to get autocomplete, press Ctrl+Space twice, once to get
+a tooltip, then again to get the autocomplete list.
 
 For more information, see the Valencia documentation at http://trac.yorba.org/wiki/Valencia.
 
