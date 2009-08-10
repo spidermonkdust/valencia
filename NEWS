@@ -1,3 +1,9 @@
+Valencia 0.2.1 - August 10, 2009
+--------------------------------
+
+Minor bugfix release:
+ * Display correct version number.
+
 Valencia 0.2.0 - August 7, 2009
 -------------------------------
 
@@ -17,5 +23,4 @@ Initial release.  Features include:
  * Building a Vala program in gedit
  * Jumping to build errors
  * Running a Vala program in gedit
-
 
