@@ -562,7 +562,7 @@ class Instance : Object {
 
     Gtk.ActionGroup action_group;
     Gtk.MenuItem go_to_definition_menu_item;
-    Gtk.MenuItem go_to_enclosing_method_or_class_menu_item;
+    Gtk.MenuItem go_to_outer_scope_menu_item;
     Gtk.MenuItem go_back_menu_item;
     Gtk.MenuItem go_forward_menu_item;
     Gtk.MenuItem next_error_menu_item;
@@ -619,8 +619,8 @@ class Instance : Object {
     const Gtk.ActionEntry[] entries = {
         { "SearchGoToDefinition", null, "Go to _Definition", "F12",
           "Jump to a symbol's definition", on_go_to_definition },
-        { "SearchGoToEnclosingMethod", null, "Go to enclosing _method or class", "<ctrl>F12",
-          "Jump to the enclosing method or class", on_go_to_enclosing_method_or_class },
+        { "SearchGoToEnclosingMethod", null, "Go to _Outer Scope", "<ctrl>F12",
+          "Jump to the enclosing method or class", on_go_to_outer_scope },
         { "SearchGoBack", Gtk.STOCK_GO_BACK, "Go _Back", "<alt>Left",
           "Go back after jumping to a definition", on_go_back },
         { "SearchGoForward", Gtk.STOCK_GO_FORWARD, "Go F_orward", "<alt>Right",
@@ -629,8 +629,8 @@ class Instance : Object {
           "Go to the next compiler error in the ouput and view panes", on_next_error },
         { "SearchPrevError", null, "_Previous Error", "<ctrl><alt>p",
           "Go to the previous compiler error in the ouput and view panes", on_prev_error },
-        { "SearchAutocomplete", null, "_Autocomplete", "<ctrl>space",
-          "Display a tooltip for the method you are typing", on_display_tooltip_or_autocomplete },
+        { "SearchAutocomplete", null, "_AutoComplete", "<ctrl>space",
+          "Display method or symbol information", on_display_tooltip_or_autocomplete },
         
         { "Project", null, "_Project" },   // top-level menu
 
@@ -738,9 +738,9 @@ class Instance : Object {
             "/MenuBar/SearchMenu/SearchOps_8/SearchGoToDefinitionMenu");
         assert(go_to_definition_menu_item != null);
         
-        go_to_enclosing_method_or_class_menu_item = (Gtk.MenuItem) manager.get_widget(
+        go_to_outer_scope_menu_item = (Gtk.MenuItem) manager.get_widget(
             "/MenuBar/SearchMenu/SearchOps_8/SearchGoToEnclosingMethodMenu");
-        assert(go_to_enclosing_method_or_class_menu_item != null);
+        assert(go_to_outer_scope_menu_item != null);
         
         go_back_menu_item = (Gtk.MenuItem) manager.get_widget(
             "/MenuBar/SearchMenu/SearchOps_8/SearchGoBackMenu");
@@ -1323,7 +1323,7 @@ class Instance : Object {
             jump(dest.filename, new CharRange(sym.start, sym.start + (int) sym.name.length));
     }
     
-    void on_go_to_enclosing_method_or_class() {
+    void on_go_to_outer_scope() {
         string? filename = active_filename();
         if (filename == null || !Program.is_vala(filename))
             return;
