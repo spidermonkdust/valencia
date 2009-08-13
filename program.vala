@@ -662,8 +662,8 @@ class Makefile : Object {
     bool regex_parse(GLib.DataInputStream datastream) {
         Regex program_regex, rule_regex, root_regex;
         try {            
-            root_regex = new Regex("""^ *BUILD_ROOT *= *1$""");
-            program_regex = new Regex("""^ *PROGRAM *= *(.+) *$""");
+            root_regex = new Regex("""^\s*BUILD_ROOT\s*=\s*1\s*$""");
+            program_regex = new Regex("""^\s*PROGRAM\s*=\s*(\S+)\s*$""");
             rule_regex = new Regex("""^ *([^: ]+) *:""");
         } catch (RegexError e) {
             GLib.warning("A RegexError occured when creating a new regular expression.\n");
