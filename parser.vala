@@ -9,7 +9,36 @@
 
 using Gee;
 
-class Parser : Object {
+namespace Valencia {
+
+public class ScanScope : Object {
+  public int depth;
+  public int start_pos;
+  public int end_pos;
+  
+  public ScanScope(int depth, int start_pos, int end_pos) {
+      this.depth = depth;
+      this.start_pos = start_pos;
+      this.end_pos = end_pos;
+  }
+}
+
+public class MethodScanInfo : Object {
+  public CompoundName method_name;
+  public int method_start_position;
+  public bool tooltip_new;
+  public bool autocomplete_new;
+
+  public MethodScanInfo(CompoundName? method_name, int method_start_position, bool tooltip_new, 
+                        bool autocomplete_new) {
+      this.method_name = method_name;
+      this.method_start_position = method_start_position;
+      this.tooltip_new = tooltip_new;
+      this.autocomplete_new = autocomplete_new;
+  }
+}
+
+public class Parser : Object {
     SourceFile source;
     Scanner scanner;
     Namespace current_namespace;
@@ -715,6 +744,8 @@ class Parser : Object {
 
 }
 
+}
+
 void main(string[] args) {
     if (args.length < 2) {
         stderr.puts("usage: symbol <file>\n");
@@ -726,8 +757,8 @@ void main(string[] args) {
         stderr.puts("can't read file\n");
         return;
     }
-    SourceFile sf = new SourceFile(null, filename);
-    new Parser().parse(sf, source);
+    Valencia.SourceFile sf = new Valencia.SourceFile(null, filename);
+    new Valencia.Parser().parse(sf, source);
     sf.print(0);
 }
 

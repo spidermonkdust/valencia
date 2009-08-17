@@ -7,6 +7,8 @@
  *   Adam Dingle <adam@yorba.org>
  */
 
+namespace Valencia {
+
 enum Token {
     NONE,
     EOF,
@@ -262,3 +264,4 @@ class Scanner : Object {
 
 }
 
+}

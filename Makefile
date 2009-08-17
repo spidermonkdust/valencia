@@ -3,7 +3,7 @@ VERSION = 0.2.1
 
 VALAC = valac
 
-SOURCES = util.vala parser.vala program.vala scanner.vala valencia.vala
+SOURCES = util.vala gtk_util.vala parser.vala program.vala scanner.vala valencia.vala
 LIBS = --pkg vala-1.0 --pkg gedit-2.20 --pkg vte
 
 DIST_FILES = $(SOURCES) \
@@ -23,7 +23,7 @@ install:
 	cp libvalencia.so valencia.gedit-plugin ~/.gnome2/gedit/plugins
 
 parser: parser.vala program.vala scanner.vala util.vala
-	$(VALAC) --pkg gee-1.0 --pkg gtk+-2.0 $^ -o $@
+	$(VALAC) --pkg vala-1.0 --pkg gtk+-2.0 $^ -o $@
 
 $(DIST_TAR_BZ2): $(DIST_FILES)
 	tar -cv $(DIST_FILES) > $(DIST_TAR)
