@@ -22,7 +22,7 @@ enum Token {
     HASH, LEFT_PAREN, RIGHT_PAREN, PERIOD, QUESTION_MARK, SEMICOLON, LESS_THAN, GREATER_THAN,
 
     // keywords
-    ABSTRACT, CLASS, CONST, CONSTRUCT, DELEGATE, ENUM, EXTERN, FOREACH, IF, INLINE, INTERFACE,
+    ABSTRACT, CLASS, CONST, CONSTRUCT, DELEGATE, ENUM, EXTERN, FOR, FOREACH, IF, INLINE, INTERFACE,
     INTERNAL, NAMESPACE, NEW, OUT, OVERRIDE, OWNED, PRIVATE, PROTECTED, PUBLIC, REF, RETURN, SIGNAL,
     STATIC, STRUCT, THIS, UNOWNED, USING, VIRTUAL, WEAK, WHILE
 }
@@ -40,6 +40,7 @@ const Keyword[] keywords = {
     { "delegate", Token.DELEGATE },
     { "enum", Token.ENUM },
     { "extern", Token.EXTERN },
+    { "for", Token.FOR },
     { "foreach", Token.FOREACH },
     { "if", Token.IF },
     { "inline", Token.INLINE },

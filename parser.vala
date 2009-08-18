@@ -35,7 +35,7 @@ public class MethodScanInfo : Object {
       this.method_start_position = method_start_position;
       this.tooltip_new = tooltip_new;
       this.autocomplete_new = autocomplete_new;
-  }
+    }
 }
 
 public class Parser : Object {
@@ -176,26 +176,7 @@ public class Parser : Object {
         } else skip_expression();
         return null;
     }
-
-    ForEach? parse_foreach() {
-        int start = scanner.start;
-        if (!accept(Token.LEFT_PAREN))
-            return null;
-        CompoundName type = parse_type();
-        if (type == null || !accept(Token.ID)) {
-            skip();
-            return null;
-        }
-        LocalVariable v = new LocalVariable(type, scanner.val(), source, scanner.start, scanner.end);
-        skip_expression();
-        if (!accept(Token.RIGHT_PAREN)) {
-            skip();
-            return null;
-        }
-        Statement s = parse_statement();
-        return new ForEach(v, s, start, scanner.end);
-    }
-
+    
     LocalVariable? parse_local_variable(CompoundName type) {
         if (!accept(Token.ID))
             return null;
@@ -211,8 +192,47 @@ public class Parser : Object {
         return v;
     }
 
+    For? parse_foreach() {
+        int start = scanner.start;
+        if (!accept(Token.LEFT_PAREN))
+            return null;
+        CompoundName type = parse_type();
+        if (type == null) {
+            skip();
+            return null;
+        }
+
+        int declaration_start = scanner.start;
+        ArrayList<LocalVariable> variables = new ArrayList<LocalVariable>();
+        LocalVariable v = parse_local_variable(type);
+        if (v == null)
+            return null;
+        
+        while (v != null) {
+            variables.add(v);
+            if (!accept(Token.COMMA))
+                break;
+            v = parse_local_variable(type);
+        }
+
+        DeclarationStatement declaration = new DeclarationStatement(variables, declaration_start,
+                                                                    scanner.end);
+
+        // Both for and foreach need to skip to the right parenthesis after declaring variables
+        do {
+            skip_expression();
+        } while (!scanner.eof() && accept(Token.SEMICOLON));
+        
+        if (!accept(Token.RIGHT_PAREN)) {
+            skip();
+            return null;
+        }
+        Statement s = parse_statement();
+        return new For(declaration, s, start, scanner.end);
+    }
+
     Statement? parse_statement() {
-        if (accept(Token.FOREACH))
+        if (accept(Token.FOREACH) || accept(Token.FOR))
             return parse_foreach();
 
         CompoundName type = parse_type();

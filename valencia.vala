@@ -1785,8 +1785,10 @@ class Instance : Object {
   }
 
   void on_search_menu_activated() {
-      bool definition_item_sensitive = active_document_is_valid_vala_file();
-      go_to_definition_menu_item.set_sensitive(definition_item_sensitive);
+      bool document_is_vala_file = active_document_is_valid_vala_file();
+      go_to_definition_menu_item.set_sensitive(document_is_vala_file);
+      go_to_outer_scope_menu_item.set_sensitive(document_is_vala_file);
+      
       go_back_menu_item.set_sensitive(can_go_back());
       go_forward_menu_item.set_sensitive(can_go_forward());
 
@@ -1796,7 +1798,7 @@ class Instance : Object {
       next_error_menu_item.set_sensitive(activate_error_search);
       prev_error_menu_item.set_sensitive(activate_error_search);
       
-      display_tooltip_menu_item.set_sensitive(definition_item_sensitive);
+      display_tooltip_menu_item.set_sensitive(document_is_vala_file);
   }
 
   void on_project_menu_activated() {

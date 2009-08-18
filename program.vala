@@ -267,29 +267,32 @@ public class DeclarationStatement : Statement {
   }
 }
 
-public class ForEach : Statement, Scope {
-  public LocalVariable variable;
-  public Statement statement;
-  
-  public ForEach(LocalVariable variable, Statement? statement, int start, int end) {
-      base(start, end);
-      this.variable = variable;
-      this.statement = statement;
-  }
-  
-  public override ArrayList<Node>? children() { return single_node(statement); }
-  
-  bool lookup(SymbolSet symbols, int pos) {
-      return symbols.add(variable);
-  }    
-  
-  protected override void print(int level) {
-      do_print(level, "foreach");
-      
-      variable.print(level + 1);
-      if (statement != null)
-          statement.print(level + 1);
-  }
+// The For class will handle both for and foreach statements
+class For : Statement, Scope {
+    public DeclarationStatement declaration;
+    public Statement statement;
+    
+    public For(DeclarationStatement declaration, Statement? statement, int start, int end) {
+        base(start, end);
+        this.declaration = declaration;
+        this.statement = statement;
+    }
+    
+    public override ArrayList<Node>? children() { return single_node(statement); }
+    
+    bool lookup(SymbolSet symbols, int pos) {
+        return declaration.defines_symbol(symbols);
+    }    
+
+    protected override void print(int level) {
+        do_print(level, "foreach");
+        
+        foreach (LocalVariable variable in declaration.variables) {
+            variable.print(level + 1);
+            if (statement != null)
+                statement.print(level + 1);
+        }
+    }
 }
 
 public class Chain : Object {
