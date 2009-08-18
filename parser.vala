@@ -24,12 +24,12 @@ public class ScanScope : Object {
 }
 
 public class MethodScanInfo : Object {
-  public CompoundName method_name;
+  public Expression method_name;
   public int method_start_position;
   public bool tooltip_new;
   public bool autocomplete_new;
 
-  public MethodScanInfo(CompoundName? method_name, int method_start_position, bool tooltip_new, 
+  public MethodScanInfo(Expression? method_name, int method_start_position, bool tooltip_new, 
                         bool autocomplete_new) {
       this.method_name = method_name;
       this.method_start_position = method_start_position;
@@ -77,15 +77,15 @@ public class Parser : Object {
             }
     }
 
-    CompoundName? parse_type() {
+    Expression? parse_type() {
         accept(Token.UNOWNED) || accept(Token.WEAK);
         if (!accept(Token.ID))
             return null;
-        CompoundName t = new SimpleName(scanner.val());
+        Expression t = new Id(scanner.val());
         while (accept(Token.PERIOD)) {
             if (!accept(Token.ID))
                 return null;
-            t = new QualifiedName(t, scanner.val());
+            t = new CompoundExpression(t, scanner.val());
         }
         if (accept(Token.LESS_THAN)) {    // parameterized type
             if (parse_type() == null)
@@ -137,7 +137,7 @@ public class Parser : Object {
             return null;    // end of parameter list
         skip_attributes();
         accept(Token.OUT) || accept(Token.REF) || accept(Token.OWNED);
-        CompoundName type = parse_type();
+        Expression type = parse_type();
         if (type == null || !accept(Token.ID))
             return null;
         Parameter p = new Parameter(type, scanner.val(), source, scanner.start, scanner.end);
@@ -147,9 +147,9 @@ public class Parser : Object {
     }
     
     // Parse an expression, returning the expression's type if known.
-    CompoundName? parse_expression() {
+    Expression? parse_expression() {
         if (accept(Token.NEW)) {
-            CompoundName type = parse_type();
+            Expression type = parse_type();
             if (accept(Token.LEFT_PAREN)) {
                 while (true) {
                     skip_expression();
@@ -177,14 +177,14 @@ public class Parser : Object {
         return null;
     }
     
-    LocalVariable? parse_local_variable(CompoundName type) {
+    LocalVariable? parse_local_variable(Expression type) {
         if (!accept(Token.ID))
             return null;
 
         string name = scanner.val();
         LocalVariable v = new LocalVariable(type, name, source, scanner.start, scanner.end);
         if (accept(Token.EQUALS)) {
-            CompoundName inferred_type = parse_expression();
+            Expression inferred_type = parse_expression();
             if (v.type.to_string() == "var" && inferred_type != null)
                 v.type = inferred_type;
         }
@@ -196,7 +196,7 @@ public class Parser : Object {
         int start = scanner.start;
         if (!accept(Token.LEFT_PAREN))
             return null;
-        CompoundName type = parse_type();
+        Expression type = parse_type();
         if (type == null) {
             skip();
             return null;
@@ -235,7 +235,7 @@ public class Parser : Object {
         if (accept(Token.FOREACH) || accept(Token.FOR))
             return parse_foreach();
 
-        CompoundName type = parse_type();
+        Expression type = parse_type();
         if (type != null && peek_token() == Token.ID) {
             int start = scanner.start;
             ArrayList<LocalVariable> variables = new ArrayList<LocalVariable>();
@@ -323,7 +323,7 @@ public class Parser : Object {
 
     Symbol? parse_method_or_field(Class? enclosing_class) {
         weak string input = scanner.get_start_after_comments();
-        CompoundName type = parse_type();
+        Expression type = parse_type();
         if (type == null) {
             skip();
             return null;
@@ -333,10 +333,10 @@ public class Parser : Object {
             if (peek_token() == Token.LEFT_PAREN && type.to_string() == enclosing_class.name)
                 return parse_method(new Constructor(null, enclosing_class, source), input);
             // Parse named constructors
-            else if (type is QualifiedName) {
-                QualifiedName qualified_type = type as QualifiedName;
-                if (qualified_type.basename.to_string() == enclosing_class.name)
-                    return parse_method(new Constructor(qualified_type.name, enclosing_class, source), input);
+            else if (type is CompoundExpression) {
+                CompoundExpression qualified_type = type as CompoundExpression;
+                if (qualified_type.left.to_string() == enclosing_class.name)
+                    return parse_method(new Constructor(qualified_type.right, enclosing_class, source), input);
             }
         }
         if (!accept(Token.ID)) {
@@ -425,7 +425,7 @@ public class Parser : Object {
             case Token.STRUCT:
             case Token.ENUM:
                 next_token();
-                return parse_class(t == Token.ENUM, enclosing_class);
+                return parse_class(t, enclosing_class);
             case Token.CONSTRUCT:
                 return parse_construct();
             default:
@@ -433,13 +433,14 @@ public class Parser : Object {
         }
     }
 
-    Namespace? parse_containing_namespace(string name, bool is_enum, Class? enclosing_class) {
+    Namespace? parse_containing_namespace(string name, Token container_type, 
+                                          Class? enclosing_class) {
         Namespace n = open_namespace(name);
 
         Namespace parent = current_namespace;
         current_namespace = n;
 
-        TypeSymbol inner = parse_class(is_enum, enclosing_class);
+        TypeSymbol inner = parse_class(container_type, enclosing_class);
         if (inner == null)
             n = null;
         else {
@@ -451,17 +452,20 @@ public class Parser : Object {
         return n;
     }
 
-    TypeSymbol? parse_class(bool is_enum, Class? enclosing_class) {
+    TypeSymbol? parse_class(Token container_type, Class? enclosing_class) {
         if (!accept(Token.ID)) {
             skip();
             return null;
         }
         string name = scanner.val();
-        
-        if (accept(Token.PERIOD))
-            return parse_containing_namespace(name, is_enum, enclosing_class);
 
-        Class cl = new Class(name, source, enclosing_class);
+        if (accept(Token.PERIOD))
+            return parse_containing_namespace(name, container_type, enclosing_class);
+
+        Class cl;
+        if (container_type == Token.INTERFACE)
+            cl = new Interface(name, source, enclosing_class);
+        else cl = new Class(name, source, enclosing_class);
         cl.start = scanner.start;
         
         // Make sure to discard any generic qualifiers
@@ -473,7 +477,7 @@ public class Parser : Object {
 
         if (accept(Token.COLON))
             while (true) {
-                CompoundName type = parse_type();
+                Expression type = parse_type();
                 if (type == null) {
                     skip();
                     return null;
@@ -484,13 +488,13 @@ public class Parser : Object {
             }
         if (!accept(Token.LEFT_BRACE))
             return null;
-            
-        if (is_enum) {
+
+        if (container_type == Token.ENUM) {
             while (true) {
                 skip_attributes();
                  if (!accept(Token.ID))
                      break;
-                Field f = new Field(new SimpleName(name), scanner.val(), source, scanner.start, 0);
+                Field f = new Field(new Id(name), scanner.val(), source, scanner.start, 0);
                 if (accept(Token.EQUALS))
                     skip_expression();
                 f.end = scanner.end;
@@ -588,24 +592,35 @@ public class Parser : Object {
         source.top.end = scanner.end;
     }
 
-    public CompoundName? name_at(string input, int pos, out bool in_new) {
+    public Expression? name_at(string input, int pos, out bool in_new) {
         scanner = new Scanner(input);
-        while (scanner.end < pos) {
+        while (scanner.end <= pos) {
             Token t = scanner.next_token();
             if (t == Token.EOF)
                 break;
-            if (t == Token.THIS) // the name could be a member of a class
-                accept(Token.PERIOD);
-            else if (t == Token.NEW)
+            //if (t == Token.THIS) // the name could be a member of a class
+            //    accept(Token.PERIOD);
+            if (t == Token.NEW)
                 in_new = true;
-            else if (t == Token.ID) {
-                CompoundName name = new SimpleName(scanner.val());
+            else if (t == Token.ID || t == Token.THIS || t == Token.BASE) {
+                Expression name;
+                if (t == Token.ID)
+                    name = new Id(scanner.val());
+                else if (t == Token.THIS)
+                    name = new This();
+                else {
+                    name = new Base();
+                    // If this is a function call, then the base constructor is being called
+                    if (peek_token() == Token.LEFT_PAREN)
+                        in_new = true;
+                }
+                
                 while (true) {
                     if (scanner.end >= pos)
                         return name;
                     if (!accept(Token.PERIOD) || !accept(Token.ID))
                         break;
-                    name = new QualifiedName(name, scanner.val());
+                    name = new CompoundExpression(name, scanner.val());
                 }
             } else in_new = false;
         }
@@ -614,7 +629,7 @@ public class Parser : Object {
         return null;
     }
 
-    public MethodScanInfo? method_at(string input, int pos, out CompoundName? name_at_cursor) {
+    public MethodScanInfo? method_at(string input, int pos, out Expression? name_at_cursor) {
         Stack<MethodScanInfo> stack = new Stack<MethodScanInfo>();
         int free_left_parens = 0;
         bool tooltip_new = false;
@@ -638,13 +653,21 @@ public class Parser : Object {
             } else if (t == Token.NEW) {
                 tooltip_new = true;
                 autocomplete_new = true;
-            } else if (t == Token.ID) {
-                CompoundName name = new SimpleName(scanner.val());
+            } else if (t == Token.ID || t == Token.THIS || t == Token.BASE) {
+                Expression name;
+                if (t == Token.ID)
+                    name = new Id(scanner.val());
+                else if (t == Token.THIS)
+                    name = new This();
+                else {
+                    name = new Base();
+                }
+                
                 if (scanner.end <= pos)
                     name_at_cursor = name;
                 else if (scanner.start < pos) {
                     string partial = scanner.val_from_start_to_offset(pos - scanner.start);
-                    name_at_cursor = new SimpleName(partial);
+                    name_at_cursor = new Id(partial);
                 }
                 while (true) {
                     if (scanner.end >= pos) {
@@ -658,17 +681,17 @@ public class Parser : Object {
                         break;
 
                     // Include the period operator for member lookups when autocompleting
-                    name_at_cursor = new QualifiedName(name, "");
+                    name_at_cursor = new CompoundExpression(name, "");
 
                     if (!accept(Token.ID))
                         break;
 
                     if (scanner.end > pos && scanner.start < pos) {
                         string partial = scanner.val_from_start_to_offset(pos - scanner.start);
-                        name_at_cursor = new QualifiedName(name, partial);
+                        name_at_cursor = new CompoundExpression(name, partial);
                     }
                     
-                    name = new QualifiedName(name, scanner.val());
+                    name = new CompoundExpression(name, scanner.val());
                     
                     if (scanner.end <= pos) {
                         name_at_cursor = name;

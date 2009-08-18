@@ -1248,10 +1248,10 @@ class Instance : Object {
       get_buffer_str_and_pos(filename, out source, out pos);
 
       bool in_new;
-      CompoundName name = new Parser().name_at(source, pos, out in_new); 
+      Expression name = new Parser().name_at(source, pos, out in_new); 
       if (name == null)
           return;
-
+          
       Program program = Program.find_containing(filename);
       SourceFile sf = program.find_source(filename);
       Symbol? sym = sf.resolve(name, pos, in_new);
@@ -1661,7 +1661,7 @@ class Instance : Object {
       Method method;
       MethodScanInfo info;
       int cursor_pos;
-      CompoundName name_at_cursor;
+      Expression name_at_cursor;
       get_tooltip_and_autocomplete_info(out method, out info, out cursor_pos, out name_at_cursor);
 
       if (method != null)
@@ -1669,7 +1669,7 @@ class Instance : Object {
                    info.method_start_position);  
       else {
           if (name_at_cursor == null)
-              name_at_cursor = new SimpleName("");
+              name_at_cursor = new Id("");
           
           string? filename = active_filename();
           Program program = Program.find_containing(filename);
@@ -1684,7 +1684,7 @@ class Instance : Object {
       Method method;
       MethodScanInfo info;
       int cursor_pos;
-      CompoundName name_at_cursor;
+      Expression name_at_cursor;
       get_tooltip_and_autocomplete_info(out method, out info, out cursor_pos, out name_at_cursor);
   
       if (method != null)
@@ -1696,11 +1696,11 @@ class Instance : Object {
       Method method;
       MethodScanInfo info;
       int cursor_pos;
-      CompoundName name_at_cursor;
+      Expression name_at_cursor;
       get_tooltip_and_autocomplete_info(out method, out info, out cursor_pos, out name_at_cursor);
 
       if (name_at_cursor == null)
-          name_at_cursor = new SimpleName("");
+          name_at_cursor = new Id("");
 
       string? filename = active_filename();
       Program program = Program.find_containing(filename);
@@ -1712,7 +1712,7 @@ class Instance : Object {
   }
 
   void get_tooltip_and_autocomplete_info(out Method? method, out MethodScanInfo info, 
-                                         out int cursor_pos, out CompoundName? name_at_cursor) {
+                                         out int cursor_pos, out Expression? name_at_cursor) {
       string? filename = active_filename();
       weak string source;
       get_buffer_str_and_pos(filename, out source, out cursor_pos); 
