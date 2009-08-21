@@ -210,8 +210,7 @@ public abstract class Node : Object {
             Constructor c = symbol as Constructor;
             assert(c != null);
             return c.parent.name.hash();
-        } else
-            return symbol.name.hash();
+        } else return symbol.name.hash();
     }
 
     public static bool equal(void* a, void* b) {
@@ -841,6 +840,130 @@ public class Makefile : Object {
 
 }
 
+public class ConfigurationFile : Object {
+    weak Program parent_program;
+
+    const string build_command_keyword = "build_command";
+    const string version_keyword = "version";
+    const string version = "0";
+
+    string build_command;
+
+    public ConfigurationFile(Program parent_program) {
+        this.parent_program = parent_program;
+        build_command = null;
+    }
+    
+    string get_file_path() {
+        return Path.build_filename(parent_program.get_top_directory(), ".valencia");
+    }
+
+    void load() {
+        string file_path = get_file_path();
+
+        if (!FileUtils.test(file_path, FileTest.EXISTS))
+            return;
+
+        string contents;
+        try {
+            FileUtils.get_contents(file_path, out contents);
+        } catch (FileError e) {
+            GLib.warning("Problem while trying to read %s\n", file_path);
+            return;        
+        }
+
+        Regex config_regex;
+        try {
+            // Match something like: "word_group = value"
+            config_regex = new Regex("""^\s*([^\s]+)\s*=\s*(.+)\s*$""");
+        } catch (RegexError e) {
+            GLib.warning("Problem creating a regex to parse the config file\n");
+            return;
+        }
+
+        string[] lines = contents.split("\n");
+        bool matched_version = false;
+        bool matched_build_command = false;
+
+        foreach (string line in lines) {
+            // Ignore lines with whitespace
+            line.chomp();
+            if (line == "")
+                continue;
+        
+            MatchInfo match_info;
+
+            if (!config_regex.match(line, 0, out match_info)) {
+                warning("Incorrect file format, ignoring...\n");
+                return;
+            }
+
+            string match1 = match_info.fetch(1);
+            string match2 = match_info.fetch(2);
+
+            // Only match the version on the first line with text, any other line is a parse error
+            if (!matched_build_command && match1 == version_keyword && match2 == version) {
+                matched_version = true;
+                continue;
+            } else if (!matched_version) {
+                warning("Mismatched config file version, ignoring...\n");
+                return;
+            }
+
+            if (match1 == build_command_keyword) {
+                if (!matched_build_command && match2 != null) {
+                    build_command = match2;
+                } else {
+                    warning("Incorrect file format, ignoring...\n");
+                    return;
+                }
+            }
+        }
+    }
+
+    public string? get_build_command() {
+        if (build_command == null)
+            load();
+        return build_command;
+    }
+
+    public void update(string new_build_command) {
+        build_command = new_build_command;
+    
+        string file_path = get_file_path();
+        FileStream file = FileStream.open(file_path, "w");
+        
+        if (file == null) {
+            warning("Could not open %s for writing\n", file_path);
+            return;
+        }
+        
+        file.printf("%s = %s\n", version_keyword, version);
+        file.printf("%s = %s\n", build_command_keyword, build_command);
+    }
+
+    public void update_location(string old_directory) {
+        File old_file = File.new_for_path(Path.build_filename(old_directory, ".valencia"));
+        File new_file = File.new_for_path(get_file_path());
+
+        if (!FileUtils.test(old_file.get_path(), FileTest.EXISTS))
+            return;
+
+        try {
+            old_file.copy(new_file, FileCopyFlags.OVERWRITE, null, null);
+        } catch (Error e) {
+            GLib.warning("Problem while copying old .valencia to %s\n", new_file.get_path());
+        }
+
+        try {
+            old_file.delete(null);
+        } catch (Error e) {
+            GLib.warning("Problem while deleting %s\n", old_file.get_path());
+        }
+    }
+
+}
+
 public class Program : Object {
     public ErrorList error_list;
 
@@ -857,6 +980,7 @@ public class Program : Object {
     static ArrayList<Program> programs;
     
     Makefile makefile;
+    public ConfigurationFile config_file;
 
     bool recursive_project;
     
@@ -869,11 +993,12 @@ public class Program : Object {
         top_directory = null;
         parsing = true;
         makefile = new Makefile();
+        config_file = new ConfigurationFile(this);
         
-        // Search for the program's makefile; if the top_directory still hasn't been modified
+        // Search for the program's build_root; if the top_directory still hasn't been modified
         // (meaning no makefile at all has been found), then just set it to the default directory
-        File makefile_dir = File.new_for_path(directory);
-        if (get_makefile_directory(makefile_dir)) {
+        File root_dir = File.new_for_path(directory);
+        if (get_build_root_directory(root_dir)) {
             recursive_project = true;
         } else {
             // If no root directory was found, make sure there is a local top directory, and 
@@ -889,7 +1014,7 @@ public class Program : Object {
 
     // Returns true if a BUILD_ROOT or configure.ac was found: files should be found recursively
     // False if only the local directory will be used
-    bool get_makefile_directory(GLib.File makefile_dir) {
+    bool get_build_root_directory(GLib.File makefile_dir) {
         if (configure_exists_in_directory(makefile_dir))
             return true;
     
@@ -917,7 +1042,7 @@ public class Program : Object {
     
     bool goto_parent_directory(GLib.File base_directory) {
         GLib.File parent_dir = base_directory.get_parent();
-        return parent_dir != null && get_makefile_directory(parent_dir);
+        return parent_dir != null && get_build_root_directory(parent_dir);
     }
     
     bool configure_exists_in_directory(GLib.File configure_dir) {
@@ -1235,7 +1360,7 @@ public class Program : Object {
 
         // get_makefile_directory will set top_directory to the path of the makefile it found - 
         // if the path is the same as the old top_directory, then no changes have been made
-        bool found_root = program.get_makefile_directory(current_dir);
+        bool found_root = program.get_build_root_directory(current_dir);
 
         // If a root was found and the new and old directories are the same, the old root was found:
         // nothing changes.
@@ -1248,6 +1373,9 @@ public class Program : Object {
         // already; if not, then we need to set it to the local directory manually
         if (!found_root)
             program.top_directory = local_directory;
+            
+        // Make sure to move any .valencia files from the old root to the new root
+        program.config_file.update_location(old_top_directory);
 
         // The build root has changed, so: 
         // 1) delete the old root
@@ -1288,8 +1416,9 @@ public class Program : Object {
         if (Path.is_absolute(filename))
             return filename;
 
-        // Make sure the whole basename is matched, not just part of it            
-        string relative_path = (filename.contains("/")) ? filename : "/" + filename;
+        // Make sure the whole basename is matched, not just part of it
+        string relative_path = (filename.contains(Path.DIR_SEPARATOR_S)) ? 
+                                  filename : Path.DIR_SEPARATOR_S + filename;
         
         // Search for the best partial match possible
         foreach (SourceFile sf in sources) {
@@ -1331,5 +1460,5 @@ public class Program : Object {
     
 }
 
-}
+} // namespace Valencia
 
