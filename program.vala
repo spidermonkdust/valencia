@@ -58,7 +58,7 @@ public class SymbolSet : Object {
     bool constructor;
 
     SymbolSet(string name, bool type, bool exact, bool constructor) {
-        this.name = name;
+        this.name = exact ? name : name.down(); // case-insensitive matching
         this.type = type;
         this.exact = exact;
         this.constructor = constructor;
@@ -97,10 +97,11 @@ public class SymbolSet : Object {
         if (sym.name == null)
             return false;
 
+        // Case-insensitive matching for inexact matching
         if (exact) {
             if (sym.name != name)
                 return false;
-        } else if (!sym.name.has_prefix(name)) {
+        } else if (!sym.name.down().has_prefix(name)) {
                 return false;
         }
 
@@ -839,6 +840,7 @@ public class Makefile : Object {
     }
 
 }
+
 
 public class ConfigurationFile : Object {
     weak Program parent_program;

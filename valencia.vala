@@ -479,8 +479,20 @@ class AutocompleteDialog : Object {
 
         weak string selection = v.get_string();
 
-        // delete the rest of the string at cursor
+        // delete the whole string at cursor and replace it (the case may not match)
         Gtk.TextIter start = get_insert_iter(buffer);
+        if (start.get_char().isspace())
+            start.backward_char();
+
+        while (true) {
+            unichar c = start.get_char();
+            if (!c.isalnum() && c != '_')
+                break;
+            if (!start.backward_char())
+                break;
+        }
+        start.forward_char(); // don't include the nonalphanumeric character
+
         Gtk.TextIter end = start;
         while (true) {
             unichar c = end.get_char();
@@ -491,9 +503,8 @@ class AutocompleteDialog : Object {
         }
         buffer.delete(start, end);
 
-        string completed = selection.substring(partial_name.length);    
         long offset = selection.has_suffix(")") ? 1 : 0;
-        buffer.insert_at_cursor(completed, (int) (completed.length - offset));
+        buffer.insert_at_cursor(selection, (int) (selection.length - offset));
 
         hide();
     }
@@ -538,7 +549,7 @@ class ProjectSettingsDialog : Object {
     void on_entry_activated() {
         dialog.response(Gtk.ResponseType.OK);
     }
-
+    
     void load_build_command(string active_filename) {
         if (build_command == null) {
             Program program = Program.find_containing(active_filename);
@@ -553,7 +564,6 @@ class ProjectSettingsDialog : Object {
         load_build_command(active_filename);
         build_entry.set_text(build_command);
         dialog.set_focus(build_entry);
-        
         int result = dialog.run();
         switch (result) {
             case Gtk.ResponseType.OK:
@@ -568,7 +578,7 @@ class ProjectSettingsDialog : Object {
     void hide() {
         dialog.hide();
     }
-    
+
     void save_and_close() {
         string new_command = build_entry.get_text();
         if (new_command != build_command && new_command != "") {
@@ -779,7 +789,7 @@ class Instance : Object {
         if (search_menu != null)
             search_menu.activate += on_search_menu_activated;
         else critical("null search_menu");
-
+        
         Gtk.MenuItem project_menu = (Gtk.MenuItem) manager.get_widget(
             "/MenuBar/ExtraMenu_1/ProjectMenu");
         if (project_menu != null)
@@ -1110,16 +1120,16 @@ class Instance : Object {
         int output_fd;
         int error_fd;
         try {
-            Process.spawn_async_with_pipes(
-                last_program_to_build.get_top_directory(),    // working directory
-                argv,
-                null,   // environment
-                SpawnFlags.SEARCH_PATH,
-                null,   // child_setup
-                out child_pid,
-                out input_fd,
-                out output_fd,
-                out error_fd);
+        Process.spawn_async_with_pipes(
+            last_program_to_build.get_top_directory(),    // working directory
+            argv,
+            null,   // environment
+            SpawnFlags.SEARCH_PATH,
+            null,   // child_setup
+            out child_pid,
+            out input_fd,
+            out output_fd,
+            out error_fd);
         } catch (SpawnError e) {
             append_with_tag(output_buffer, "Could not execute ", italic_tag);
             append_with_tag(output_buffer, argv[0], bold_tag);
@@ -1127,7 +1137,7 @@ class Instance : Object {
             append_with_tag(output_buffer, last_program_to_build.get_top_directory(), bold_tag);
             return;
         }
-
+        
         try {
             make_pipe(output_fd, on_build_stdout);
             make_pipe(error_fd, on_build_stderr);        
@@ -1376,14 +1386,23 @@ class Instance : Object {
         Symbol? sym = sf.resolve(name, pos, in_new);
         if (sym == null)
             return;
-            
-        add_insert_cursor_to_history();
 
+        add_insert_cursor_to_history();
+        
         SourceFile dest = sym.source;
-        if (sym.name == null)
-            jump(dest.filename, new CharRange(sym.start, sym.start + (int) name.to_string().length));
-        else
+        if (sym.name == null) {
+            int length;
+
+            // Since unnamed constructors' names are null, just use the parent class' name
+            if (sym is Constructor) {
+                Constructor c = (Constructor) sym;
+                length = (int) c.parent.name.length;
+            } else length = (int) name.to_string().length;
+            
+            jump(dest.filename, new CharRange(sym.start, sym.start + length));
+        } else {
             jump(dest.filename, new CharRange(sym.start, sym.start + (int) sym.name.length));
+        }
     }
     
     void on_go_to_outer_scope() {
