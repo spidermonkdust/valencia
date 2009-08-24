@@ -163,3 +163,259 @@ class ProgressBarDialog : Gtk.Window {
         hide();
     }
 }
+
+class ListViewString : Object {
+    Gtk.ListStore list;
+    Gtk.TreeView treeview;
+    Gtk.TreeViewColumn column_view;
+    public Gtk.ScrolledWindow scrolled_window;
+    
+    public signal void row_activated();
+    public signal void recieved_focus(Gtk.TreePath? path);
+
+    public ListViewString(Gtk.TreeViewColumnSizing sizing, int fixed_width) {
+        list = new Gtk.ListStore(1, GLib.Type.from_name("gchararray"));
+
+        Gtk.CellRendererText renderer = new Gtk.CellRendererText();
+        if (sizing == Gtk.TreeViewColumnSizing.FIXED)
+            renderer.ellipsize = Pango.EllipsizeMode.END;
+        column_view = new Gtk.TreeViewColumn();
+        column_view.pack_start(renderer, true); 
+        column_view.set_sizing(sizing);
+        column_view.set_fixed_width(fixed_width);
+        column_view.set_attributes(renderer, "text", 0, null);
+        treeview = new Gtk.TreeView.with_model(list);
+        treeview.append_column(column_view);
+        treeview.headers_visible = false;
+        treeview.focus_in_event += on_recieved_focus;
+
+        scrolled_window = new Gtk.ScrolledWindow(null, null); 
+        scrolled_window.hscrollbar_policy = Gtk.PolicyType.NEVER;
+        scrolled_window.vscrollbar_policy = Gtk.PolicyType.AUTOMATIC;
+        scrolled_window.add(treeview);
+        
+        Signal.connect(treeview, "row-activated", (Callback) row_activated_callback, this);
+    }
+    
+    bool on_recieved_focus() {
+        Gtk.TreePath? path = get_path_at_cursor();
+        if (path == null)
+            path = select_first_cell();
+
+        recieved_focus(path);
+        return false;
+    }
+    
+    static void row_activated_callback(Gtk.TreeView view, Gtk.TreePath path, 
+                                       Gtk.TreeViewColumn column, ListViewString list) {
+        list.row_activated();
+    }
+    
+    public void clear() {
+        list.clear();
+    }
+    
+    public void append(string item) {
+        Gtk.TreeIter iterator;
+        list.append(out iterator);
+        list.set(iterator, 0, item, -1);
+    }
+    
+    public int size() {
+        return list.iter_n_children(null);
+    }
+    
+    public void set_vscrollbar_policy(Gtk.PolicyType policy) {
+        scrolled_window.vscrollbar_policy = policy;
+    }
+
+    /////////////////////////////////
+    // Treeview selection movement //
+    /////////////////////////////////
+
+    void select(Gtk.TreePath path, bool scroll = true) {
+        treeview.set_cursor(path, null, false);
+        if (scroll)
+            treeview.scroll_to_cell(path, null, false, 0.0f, 0.0f);
+    }
+    
+    void scroll_to_and_select_cell(double adjustment_value, int y) {
+        scrolled_window.vadjustment.set_value(adjustment_value);        
+        
+        Gtk.TreePath path;
+        int cell_x, cell_y;
+        treeview.get_path_at_pos(0, y, out path, null, out cell_x, out cell_y);
+        select(path, false);
+    }
+    
+    Gtk.TreePath? get_path_at_cursor() {
+        Gtk.TreePath path;
+        Gtk.TreeViewColumn column;
+        treeview.get_cursor(out path, out column);
+        return path;
+    }
+    
+    public Gtk.TreePath select_first_cell() {
+        treeview.get_vadjustment().set_value(0);
+        Gtk.TreePath start = new Gtk.TreePath.first();
+        select(start);
+        return start;
+    }
+
+    public void select_last_cell() {
+        // The list index is 0-based, the last element is 'size - 1'
+        int size = list.iter_n_children(null) - 1;
+        select(new Gtk.TreePath.from_string(size.to_string()));
+    }
+
+    public void select_previous() {
+        Gtk.TreePath path = get_path_at_cursor();
+        
+        if (path != null) {
+            if (path.prev())
+                select(path);
+            else select_last_cell();
+        }
+    }
+
+    public void select_next() {
+        Gtk.TreePath path = get_path_at_cursor();
+        
+        if (path != null) {
+            Gtk.TreeIter iter;
+            path.next();
+
+            // Make sure the next element iterator is valid
+            if (list.get_iter(out iter, path))
+                select(path);
+            else select_first_cell();
+        }
+    }
+
+    public void page_up() {
+        // Save the current y position of the selection
+        Gtk.TreePath cursor_path = get_path_at_cursor();
+        Gdk.Rectangle rect;
+        treeview.get_cell_area(cursor_path, null, out rect);
+        
+        // Don't wrap page_up
+        if (!cursor_path.prev()) {
+            return;
+        }
+
+        double adjust_value = scrolled_window.vadjustment.get_value();
+        double page_size = scrolled_window.vadjustment.get_page_size();
+        // If the current page is the top page, just select the top cell
+        if (adjust_value == scrolled_window.vadjustment.lower) {
+            select_first_cell();
+            return;
+        }
+
+        // it is 'y + 1' because only 'y' would be the element before the one we want
+        scroll_to_and_select_cell(adjust_value - (page_size - rect.height), rect.y + 1);
+    }
+
+    public void page_down() {
+        // Save the current y position of the selection
+        Gtk.TreePath cursor_path = get_path_at_cursor();
+        Gdk.Rectangle rect;
+        treeview.get_cell_area(cursor_path, null, out rect);
+        
+        // Don't wrap page_down
+        cursor_path.next();
+        Gtk.TreeIter iter;
+        if (!list.get_iter(out iter, cursor_path)) {
+            return;
+        }
+
+        double adjust_value = scrolled_window.vadjustment.get_value();
+        double page_size = scrolled_window.vadjustment.get_page_size();
+        // If the current page is the bottom page, just select the last cell
+        if (adjust_value >= scrolled_window.vadjustment.upper - page_size) {
+            select_last_cell();
+            return;
+        }
+
+        scroll_to_and_select_cell(adjust_value + (page_size - rect.height), rect.y + 1);
+    }
+
+    string? get_item_at_path(Gtk.TreePath path) {
+        Gtk.TreeIter iter;
+        if (!list.get_iter(out iter, path))
+            return null;
+
+        GLib.Value v;
+        list.get_value(iter, 0, out v);
+
+        return v.get_string().substring(0);
+    }
+
+    public string get_selected_item() {
+        Gtk.TreePath path;
+        Gtk.TreeViewColumn column;
+        treeview.get_cursor(out path, out column);
+        
+        return get_item_at_path(path);
+    }
+
+    bool path_exists(Gtk.TreePath path) {
+        Gtk.TreeIter iter;
+        if (list.get_iter(out iter, path))
+            return true;
+        else return false;
+    }
+
+    public void select_path(Gtk.TreePath path) {
+        if (path_exists(path))
+            select(path);
+    }
+    
+    void insert_before(string item, Gtk.TreePath path) {
+        Gtk.TreeIter new_iter;
+        Gtk.TreeIter sibling;
+        list.get_iter(out sibling, path);
+        list.insert_before(out new_iter, sibling);
+        list.set(new_iter, 0, item, -1);
+    }
+
+    void remove(Gtk.TreePath path) {
+        Gtk.TreeIter iter;
+        list.get_iter(out iter, path);
+        list.remove(iter);
+    }
+
+    public void collate(string[] new_list) {
+        Gtk.TreePath current_path = new Gtk.TreePath.first();
+        int new_list_index = 0;
+        while (true) {
+            string? item = get_item_at_path(current_path);
+            if (item == null || new_list_index == new_list.length)
+                break;
+            string new_item = new_list[new_list_index];
+
+            int result = strcmp(item, new_item);
+            if (result > 0) {
+                remove(current_path);
+            } else {
+                if (result != 0)
+                    insert_before(new_list[new_list_index], current_path);
+                current_path.next();
+                ++new_list_index;
+            }
+        }
+
+        // The rest of the items in the old list are not present, so remove them
+        while (true) {
+            if (!path_exists(current_path))
+                break;
+            remove(current_path);
+        }
+
+        // The rest of the items in the other list must be new, so add them
+        for (; new_list_index < new_list.length; ++new_list_index)
+            append(new_list[new_list_index]);
+        
+    }
+    
+}
+

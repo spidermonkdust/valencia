@@ -56,12 +56,14 @@ public class SymbolSet : Object {
     bool exact;
     bool type;
     bool constructor;
+    bool local_symbols;
 
-    SymbolSet(string name, bool type, bool exact, bool constructor) {
+    SymbolSet(string name, bool type, bool exact, bool constructor, bool local_symbols) {
         this.name = exact ? name : name.down(); // case-insensitive matching
         this.type = type;
         this.exact = exact;
         this.constructor = constructor;
+        this.local_symbols = local_symbols;
         
         // Since the set stores Symbols, but we actually want to hash their (name) strings, we must
         // provide custom hash and equality functions
@@ -125,7 +127,7 @@ public class SymbolSet : Object {
         return null;
     }
 
-    public HashSet<Symbol>? get_symbols() {
+    public unowned HashSet<Symbol>? get_symbols() {
         // It doesn't make sense to display the exact match of a partial search if there is only
         // one symbol found that matches perfectly 
         if (symbols.size == 0 || (symbols.size == 1 && !exact && first().name == name))
@@ -136,6 +138,18 @@ public class SymbolSet : Object {
     
     public string get_name() {
         return name;
+    }
+    
+    public Symbol? get_symbol(string name) {
+        foreach (Symbol symbol in symbols) {
+            if (symbol.name == name)
+                return symbol;
+        }
+        return null;
+    }
+    
+    public bool local_symbols_only() {
+        return local_symbols;
     }
 }
 
@@ -187,9 +201,9 @@ public abstract class Node : Object {
     protected void do_print(int level, string s) {
         stdout.printf("%s%s\n", string.nfill(level * 2, ' '), s);
     }    
-  }
+}
 
-  public abstract class Symbol : Node {
+public abstract class Symbol : Node {
     public SourceFile source;
     public string name;        // symbol name, or null for a constructor
     
@@ -597,6 +611,17 @@ public class Namespace : TypeSymbol, Scope {
     public bool lookup1(SymbolSet symbols) {
         return Node.lookup_in_array(this.symbols, symbols);
     }
+    
+    public void lookup_all_toplevel_symbols(SymbolSet symbols) {
+        foreach (Symbol s in this.symbols) {
+            if (s is Namespace) {
+                Namespace n = (Namespace) s;
+                n.lookup_all_toplevel_symbols(symbols);
+            } else {
+                symbols.add(s);
+            }
+        }
+    }
 
     public override void print(int level) {
         print_name(level, "namespace");
@@ -631,7 +656,7 @@ public class SourceFile : Node, Scope {
         alloc_top();
     }
 
-    public override ArrayList<Node>? children() { return single_node(top);    }
+    public override ArrayList<Node>? children() { return single_node(top); }
 
     public void add_using_namespace(string name) {
         // Make sure there isn't a duplicate, since GLib is always added
@@ -651,14 +676,16 @@ public class SourceFile : Node, Scope {
     public bool lookup_in_namespace(string? namespace_name, SymbolSet symbols) {
         foreach (Namespace n in namespaces)
             if (n.full_name == namespace_name) {
-                if (n.lookup1(symbols))
+                if (symbols.local_symbols_only())
+                    n.lookup_all_toplevel_symbols(symbols);
+                else if (n.lookup1(symbols))
                     return true;
             }
         return false;
     }
 
     public SymbolSet resolve1(Expression name, Chain chain, int pos, bool find_type, bool exact, 
-                              bool constructor) {
+                              bool constructor, bool local_symbols) {
         if (!(name is CompoundExpression)) {
             Symbol s;
             SymbolSet symbols;
@@ -668,23 +695,24 @@ public class SourceFile : Node, Scope {
                 s = chain.lookup_base(this);
             } else { // name is Id
                 Id id = (Id) name;
-                symbols = new SymbolSet(id.name, find_type, exact, constructor);
+                symbols = new SymbolSet(id.name, find_type, exact, constructor, local_symbols);
                 chain.lookup(symbols, pos);
                 return symbols;        
             }
-            
+
             // this, base symbols
             if (s != null) {
-                symbols = new SymbolSet(s.name, find_type, true, constructor);
+                symbols = new SymbolSet(s.name, find_type, true, constructor, local_symbols);
                 symbols.add(s);
-            } else symbols = new SymbolSet("", false, false, false);
+            // return an "empty" set
+            } else symbols = new SymbolSet("", false, false, false, false);
             return symbols;
         }
 
         // The basename of a qualified name is always going to be an exact match, and never a
         // constructor
         CompoundExpression compound = (CompoundExpression) name;
-        SymbolSet left_set = resolve1(compound.left, chain, pos, find_type, true, false);
+        SymbolSet left_set = resolve1(compound.left, chain, pos, find_type, true, false, local_symbols);
         Symbol left = left_set.first();
         if (!find_type) {
             Variable v = left as Variable;
@@ -696,9 +724,9 @@ public class SourceFile : Node, Scope {
 
         // It doesn't make sense to be looking up members of a method as a qualified name
         if (scope is Method)
-            return new SymbolSet("", false, false, false);
+            return new SymbolSet("", false, false, false, false);
 
-        SymbolSet symbols = new SymbolSet(compound.right, find_type, exact, constructor);
+        SymbolSet symbols = new SymbolSet(compound.right, find_type, exact, constructor, local_symbols);
         if (scope != null)
             scope.lookup(symbols, 0);
 
@@ -706,17 +734,26 @@ public class SourceFile : Node, Scope {
     }
 
     public Symbol? resolve(Expression name, int pos, bool constructor) {
-        SymbolSet symbols = resolve1(name, find(null, pos), pos, false, true, constructor);
+        SymbolSet symbols = resolve1(name, find(null, pos), pos, false, true, constructor, false);
         return symbols.first();
     }    
 
     public Symbol? resolve_type(Expression type, int pos) {
-        SymbolSet symbols = resolve1(type, find(null, pos), 0, true, true, false);
+        SymbolSet symbols = resolve1(type, find(null, pos), 0, true, true, false, false);
         return symbols.first();
     }
 
     public SymbolSet resolve_prefix(Expression prefix, int pos, bool constructor) {
-        return resolve1(prefix, find(null, pos), pos, false, false, constructor);
+        return resolve1(prefix, find(null, pos), pos, false, false, constructor, false);
+    }
+    
+    public SymbolSet resolve_all_locals(Expression prefix, int pos) {
+        return resolve1(prefix, find(null, pos), pos, false, false, false, true);
+    }
+    
+    public Symbol? resolve_local(Expression name, int pos) {
+        SymbolSet symbols = resolve1(name, find(null, pos), pos, false, true, false, true);
+        return symbols.first();
     }
 
     public override void print(int level) {
@@ -840,7 +877,6 @@ public class Makefile : Object {
     }
 
 }
-
 
 public class ConfigurationFile : Object {
     weak Program parent_program;
@@ -1240,12 +1276,15 @@ public class Program : Object {
 
     public bool lookup_in_namespace(string? namespace_name, SymbolSet symbols) {
         // First look in non-vapi files; we'd like definitions here to have precedence.
-        if (!lookup_in_namespace1(sources, namespace_name, symbols, false))
+        if (!lookup_in_namespace1(sources, namespace_name, symbols, false)) {
+            if (symbols.local_symbols_only())
+                return false;
             if (!lookup_in_namespace1(sources, namespace_name, symbols, true)); // .vapi files
                 if (!lookup_in_namespace1(system_sources, namespace_name, symbols, true))
                     return false;
+        }
         return true;
-    }    
+    }
 
     SourceFile? find_source1(string path, ArrayList<SourceFile> source_list) {
         foreach (SourceFile source in source_list) {

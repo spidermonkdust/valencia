@@ -143,468 +143,6 @@ class CharRange : Destination {
     }    
 }
 
-class AutocompleteDialog : Object {
-    weak Gedit.Window parent;
-    Gtk.Window window;
-    Gtk.ListStore list;
-    Gtk.TreeView treeview;
-    Gtk.TreeViewColumn column_view;
-    Gtk.ScrolledWindow scrolled_window;
-    bool visible;
-    string partial_name;
-
-    public AutocompleteDialog(Gedit.Window parent_win) {
-        parent = parent_win;
-        visible = false;
-        list = new Gtk.ListStore(1, GLib.Type.from_name("gchararray"));
-
-        Gtk.CellRendererText renderer = new Gtk.CellRendererText();
-        column_view = new Gtk.TreeViewColumn();
-        column_view.pack_start(renderer, true); 
-        column_view.set_sizing(Gtk.TreeViewColumnSizing.AUTOSIZE);
-        column_view.set_attributes(renderer, "text", 0, null);
-        treeview = new Gtk.TreeView.with_model(list);
-        treeview.append_column(column_view);
-        treeview.headers_visible = false;
-
-        scrolled_window = new Gtk.ScrolledWindow(null, null); 
-        scrolled_window.hscrollbar_policy = Gtk.PolicyType.NEVER;
-        scrolled_window.vscrollbar_policy = Gtk.PolicyType.AUTOMATIC;
-        scrolled_window.add(treeview);
-
-        window = new Gtk.Window(Gtk.WindowType.POPUP); 
-        window.add(scrolled_window);
-        window.set_destroy_with_parent(true);
-        window.set_default_size(200, 1); 
-        window.set_resizable(true);
-        window.set_title("");
-        window.set_border_width(1);
-        
-        window.show_all();
-        window.hide();
-
-        Signal.connect(window, "expose-event", (Callback) draw_callback, this);
-        Signal.connect(treeview, "row-activated", (Callback) row_activated_callback, this);
-    }
-
-    static bool draw_callback(Gtk.Window window, Gdk.EventExpose event, AutocompleteDialog dialog) {
-        Gtk.paint_flat_box(dialog.window.style, dialog.window.window, 
-                           Gtk.StateType.NORMAL, Gtk.ShadowType.OUT, 
-                           null, dialog.window, "tooltip",
-                           dialog.window.allocation.x, dialog.window.allocation.y,
-                           dialog.window.allocation.width, dialog.window.allocation.height);
-
-        dialog.scrolled_window.expose_event(event);
-
-        return true;
-    }
-
-    static void row_activated_callback(Gtk.TreeView view, Gtk.TreePath path, 
-                                       Gtk.TreeViewColumn column, AutocompleteDialog dialog) {
-        dialog.select_item();
-    }
-
-    unowned string? get_completion_target(Gtk.TextBuffer buffer) {
-        Gtk.TextIter start = get_insert_iter(buffer);
-        Gtk.TextIter end = start;
-        
-        while (true) {
-            start.backward_char();
-            unichar c = start.get_char();
-            if (!c.isalnum() && c != '.')
-                break;
-        }
-        // Only include characters in the ID name
-        start.forward_char();
-        
-        if (start.get_offset() == end.get_offset())
-            return null;
-        
-        return start.get_slice(end);
-    }
-    
-    string strip_completed_classnames(string list_name, string completion_target) {
-        string[] classnames = completion_target.split(".");
-        int names = classnames.length;
-        // If the last classname is not explicitly part of the class qualification, then it 
-        // should not be removed from the completion suggestion's name
-        if (!completion_target.has_suffix("."))
-            --names;
-            
-        for (int i = 0; i < names; ++i) {
-            weak string name = classnames[i];
-
-            // If the name doesn't contain the current classname, it may be a namespace name that
-            // isn't part of the list_name string - we shouldn't stop the comparison early
-            if (list_name.contains(name)) {
-                // Add one to the offset of a string to account for the "."
-                long offset = name.length;
-                if (offset > 0)
-                    ++offset;
-                list_name = list_name.offset(offset);
-            }
-        }
-
-        return list_name;
-    }
-
-    string parse_single_symbol(Symbol symbol, string? completion_target, bool constructor) {
-        string list_name = "";
-        
-        if (constructor) {
-            // Get the fully-qualified constructor name
-            Constructor c = symbol as Constructor;
-            assert(c != null);
-
-            list_name = c.parent.to_string();
-            
-            if (c.name != null)
-                list_name += "." + c.name;
-            list_name += "()";
-
-            // If the user hasn't typed anything or if either the completion string or this 
-            // constructor is not qualified, keep the original name
-            if (completion_target != null && completion_target.contains(".") 
-                && list_name.contains("."))
-                list_name = strip_completed_classnames(list_name, completion_target);
-            
-        } else {
-            list_name = symbol.name;
-            if (symbol is Method)
-                list_name = symbol.name + "()";
-        }
-        
-        return list_name;
-    }
-
-    string[]? parse_symbol_names(HashSet<Symbol>? symbols) {
-        if (symbols == null)
-            return null;
-            
-        string[] list = new string[symbols.size];
-
-        // If the first element is a constructor, all elements will be constructors
-        Iterator<Symbol> iter = symbols.iterator();
-        iter.next();
-        bool constructor = iter.get() is Constructor;
-
-        // match the extent of what the user has already typed with named constructors
-        string? completion_target = null;
-        if (constructor) {          
-            completion_target = get_completion_target(parent.get_active_document());
-        }
-
-        int i = 0;
-        foreach (Symbol symbol in symbols) {
-            list[i] = parse_single_symbol(symbol, completion_target, constructor);
-            ++i;
-        }
-            
-        qsort(list, symbols.size, sizeof(string), compare_string);
-        return list;
-    }
-
-    public void show(SymbolSet symbol_set) {
-        list.clear();
-        visible = true;
-        partial_name = symbol_set.get_name();
-
-       HashSet<Symbol>? symbols = symbol_set.get_symbols();
-       string[]? symbol_strings = parse_symbol_names(symbols);
-
-        if (symbol_strings != null) {
-            foreach (string s in symbol_strings) {
-                Gtk.TreeIter iterator;
-                list.append(out iterator);
-                list.set(iterator, 0, s, -1);
-            }
-        } else {
-            hide();
-            return;
-        }
-
-        // TODO: this must be updated to account for font size changes when adding ticket #560        
-        int size = list.iter_n_children(null);
-        if (size > 6) {
-            scrolled_window.vscrollbar_policy = Gtk.PolicyType.AUTOMATIC;
-            window.resize(200, 140);
-        } else {
-            scrolled_window.vscrollbar_policy = Gtk.PolicyType.NEVER;
-            window.resize(200, size * 23);
-        }
-
-        treeview.get_hadjustment().set_value(0);
-        treeview.get_vadjustment().set_value(0);
-
-        Gedit.Document document = parent.get_active_document(); 
-        Gtk.TextMark insert_mark = document.get_insert();
-        Gtk.TextIter insert_iter;
-        document.get_iter_at_mark(out insert_iter, insert_mark); 
-        int x, y;
-        get_coords_at_buffer_offset(parent, insert_iter.get_offset(), false, true, out x, out y);
-
-        window.move(x, y);
-        window.show_all(); 
-        window.queue_draw();
-        select_first_cell();
-    }
-    
-    public void hide() {
-        if (!visible)
-            return;
-        
-        visible = false;
-        window.hide();
-    }
-
-    public bool is_visible() {
-        return visible;
-    }
-
-    void select(Gtk.TreePath path, bool scroll = true) {
-        treeview.set_cursor(path, null, false);
-        if (scroll)
-            treeview.scroll_to_cell(path, null, false, 0.0f, 0.0f);
-    }
-
-    void scroll_to_and_select_cell(double adjustment_value, int y) {
-        scrolled_window.vadjustment.set_value(adjustment_value);        
-        
-        Gtk.TreePath path;
-        int cell_x, cell_y;
-        treeview.get_path_at_pos(0, y, out path, null, out cell_x, out cell_y);
-        select(path, false);
-    }
-    
-    Gtk.TreePath get_path_at_cursor() {
-        Gtk.TreePath path;
-        Gtk.TreeViewColumn column;
-        treeview.get_cursor(out path, out column);
-        return path;
-    }
-    
-    public Gtk.TreePath select_first_cell() {
-        Gtk.TreePath start = new Gtk.TreePath.first();
-        select(start);
-        return start;
-    }
-
-    public void select_last_cell() {
-        // The list index is 0-based, the last element is 'size - 1'
-        int size = list.iter_n_children(null) - 1;
-        select(new Gtk.TreePath.from_string(size.to_string()));
-    }
-
-    public void select_previous() {
-        Gtk.TreePath path = get_path_at_cursor();
-        
-        if (path != null) {
-            if (path.prev())
-                select(path);
-            else select_last_cell();
-        }
-    }
-
-    public void select_next() {
-        Gtk.TreePath path = get_path_at_cursor();
-        
-        if (path != null) {
-            Gtk.TreeIter iter;
-            path.next();
-
-            // Make sure the next element iterator is valid
-            if (list.get_iter(out iter, path))
-                select(path);
-            else select_first_cell();
-        }
-    }
-
-    public void page_up() {
-        // Save the current y position of the selection
-        Gtk.TreePath cursor_path = get_path_at_cursor();
-        Gdk.Rectangle rect;
-        treeview.get_cell_area(cursor_path, null, out rect);
-        
-        // Don't wrap page_up
-        if (!cursor_path.prev()) {
-            return;
-        }
-
-        double adjust_value = scrolled_window.vadjustment.get_value();
-        double page_size = scrolled_window.vadjustment.get_page_size();
-        // If the current page is the top page, just select the top cell
-        if (adjust_value == scrolled_window.vadjustment.lower) {
-            select_first_cell();
-            return;
-        }
-
-        // it is 'y + 1' because only 'y' would be the element before the one we want
-        scroll_to_and_select_cell(adjust_value - (page_size - rect.height), rect.y + 1);
-    }
-
-    public void page_down() {
-        // Save the current y position of the selection
-        Gtk.TreePath cursor_path = get_path_at_cursor();
-        Gdk.Rectangle rect;
-        treeview.get_cell_area(cursor_path, null, out rect);
-        
-        // Don't wrap page_down
-        cursor_path.next();
-        Gtk.TreeIter iter;
-        if (!list.get_iter(out iter, cursor_path)) {
-            return;
-        }
-
-        double adjust_value = scrolled_window.vadjustment.get_value();
-        double page_size = scrolled_window.vadjustment.get_page_size();
-        // If the current page is the bottom page, just select the last cell
-        if (adjust_value >= scrolled_window.vadjustment.upper - page_size) {
-            select_last_cell();
-            return;
-        }
-
-        scroll_to_and_select_cell(adjust_value + (page_size - rect.height), rect.y + 1);
-    }
-
-    public void select_item() {
-        Gedit.Document buffer = parent.get_active_document();
-        Gtk.TreePath path;
-        Gtk.TreeViewColumn column;
-        treeview.get_cursor(out path, out column);
-        
-        Gtk.TreeIter iter;
-        list.get_iter(out iter, path);
-        GLib.Value v;
-        list.get_value(iter, 0, out v);
-
-        weak string selection = v.get_string();
-
-        // delete the whole string at cursor and replace it (the case may not match)
-        Gtk.TextIter start = get_insert_iter(buffer);
-        if (start.get_char().isspace())
-            start.backward_char();
-
-        while (true) {
-            unichar c = start.get_char();
-            if (!c.isalnum() && c != '_')
-                break;
-            if (!start.backward_char())
-                break;
-        }
-        start.forward_char(); // don't include the nonalphanumeric character
-
-        Gtk.TextIter end = start;
-        while (true) {
-            unichar c = end.get_char();
-            if (!c.isalnum() && c != '_' && c != '.' && c != '(')
-                break;
-            if (!end.forward_char())
-                break;
-        }
-        buffer.delete(start, end);
-
-        long offset = selection.has_suffix(")") ? 1 : 0;
-        buffer.insert_at_cursor(selection, (int) (selection.length - offset));
-
-        hide();
-    }
-}
-
-class ProjectSettingsDialog : Object {
-    Gtk.Dialog dialog;
-    Gtk.Entry build_entry;
-    
-    string build_command;
-    static string default_build_command = "make";
-    
-    public signal void build_command_changed(string new_command);
-    
-    public ProjectSettingsDialog(Gtk.Window parent_win) {
-        // Window creation
-        Gtk.Label build_command_label = new Gtk.Label("Build command:");
-        build_entry = new Gtk.Entry();
-        build_entry.activate += on_entry_activated;
-
-        Gtk.HBox command_box = new Gtk.HBox(false, 12);
-        command_box.pack_start(build_command_label, false, false, 0);
-        command_box.pack_start(build_entry, false, false, 0);
-
-        Gtk.Alignment alignment_box = new Gtk.Alignment(0.5f, 0.5f, 1.0f, 1.0f);
-        alignment_box.set_padding(5, 6, 6, 5);
-        alignment_box.add(command_box);
-
-        dialog = new Gtk.Dialog.with_buttons("Settings", parent_win, Gtk.DialogFlags.MODAL |
-                                             Gtk.DialogFlags.DESTROY_WITH_PARENT,
-                                             Gtk.STOCK_OK, Gtk.ResponseType.OK,
-                                             Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-                                             null);
-
-        dialog.delete_event += dialog.hide_on_delete;
-
-        dialog.vbox.pack_start(alignment_box, false, false, 0);
-        // Make all children visible by default        
-        dialog.vbox.show_all();
-    }
-
-    void on_entry_activated() {
-        dialog.response(Gtk.ResponseType.OK);
-    }
-    
-    void load_build_command(string active_filename) {
-        if (build_command == null) {
-            Program program = Program.find_containing(active_filename);
-            build_command = program.config_file.get_build_command();
-            if (build_command == null)
-                build_command = default_build_command;
-        }
-    }
-
-    public void show(string active_filename) {
-        // On first-time startup, look for a .valencia file that may have a stored build command
-        load_build_command(active_filename);
-        build_entry.set_text(build_command);
-        dialog.set_focus(build_entry);
-        int result = dialog.run();
-        switch (result) {
-            case Gtk.ResponseType.OK:
-                save_and_close();
-                break;
-            default:
-                hide();
-                break;
-        }
-    }
-
-    void hide() {
-        dialog.hide();
-    }
-
-    void save_and_close() {
-        string new_command = build_entry.get_text();
-        if (new_command != build_command && new_command != "") {
-            build_command = new_command;
-            build_command_changed(build_command);
-        }
-        hide();
-    }
-
-    public string[] get_build_command(string active_filename) {
-        // make sure that any project settings have been loaded
-        load_build_command(active_filename);
-        
-        string[] argv;
-        if (build_command != null)
-            argv = build_command.split(" ");
-        else {
-            argv = new string[1];
-            argv[0] = default_build_command;
-        }
-        argv += null;
-        return argv;
-    }
-
-}
-
 class Instance : Object {
     public Gedit.Window window;
     Plugin plugin;
@@ -612,6 +150,7 @@ class Instance : Object {
 
     Gtk.ActionGroup action_group;
     Gtk.MenuItem go_to_definition_menu_item;
+    Gtk.MenuItem find_symbol_menu_item;
     Gtk.MenuItem go_to_outer_scope_menu_item;
     Gtk.MenuItem go_back_menu_item;
     Gtk.MenuItem go_forward_menu_item;
@@ -653,6 +192,9 @@ class Instance : Object {
     string target_filename;
     Destination destination;
 
+    // Symbol pane
+    SymbolBrowser symbol_browser;
+
     // Jump to definition history
     static ArrayList<Gtk.TextMark> history;
     const int MAX_HISTORY = 10;
@@ -673,6 +215,8 @@ class Instance : Object {
     const Gtk.ActionEntry[] entries = {
         { "SearchGoToDefinition", null, "Go to _Definition", "F12",
           "Jump to a symbol's definition", on_go_to_definition },
+        { "SearchFindSymbol", Gtk.STOCK_FIND, "Find _Symbol...", "<ctrl><alt>s",
+          "Search for a symbol by name", on_find_symbol },
         { "SearchGoToEnclosingMethod", null, "Go to _Outer Scope", "<ctrl>F12",
           "Jump to the enclosing method or class", on_go_to_outer_scope },
         { "SearchGoBack", Gtk.STOCK_GO_BACK, "Go _Back", "<alt>Left",
@@ -702,6 +246,7 @@ class Instance : Object {
             <menu name="SearchMenu" action="Search">
               <placeholder name="SearchOps_8">
                 <menuitem name="SearchGoToDefinitionMenu" action="SearchGoToDefinition"/>
+                <menuitem name="SearchFindSymbolMenu" action="SearchFindSymbol"/>
                 <menuitem name="SearchGoToEnclosingMethodMenu" action="SearchGoToEnclosingMethod"/>
                 <menuitem name="SearchGoBackMenu" action="SearchGoBack"/>
                 <menuitem name="SearchGoForwardMenu" action="SearchGoForward"/>
@@ -773,6 +318,11 @@ class Instance : Object {
         
         panel.add_item_with_stock_icon(run_pane, "Run", Gtk.STOCK_EXECUTE);     
         
+        // Symbol pane
+        symbol_browser = new SymbolBrowser(this);
+        Signal.connect(window, "active-tab-changed", (Callback) SymbolBrowser.on_active_tab_changed,
+                       symbol_browser);
+        
         // Enclosing class in statusbar
         old_cursor_offset = 0;
         
@@ -799,6 +349,10 @@ class Instance : Object {
         go_to_definition_menu_item = (Gtk.MenuItem) manager.get_widget(
             "/MenuBar/SearchMenu/SearchOps_8/SearchGoToDefinitionMenu");
         assert(go_to_definition_menu_item != null);
+        
+        find_symbol_menu_item = (Gtk.MenuItem) manager.get_widget(
+            "/MenuBar/SearchMenu/SearchOps_8/SearchFindSymbolMenu");
+        assert(find_symbol_menu_item != null);
         
         go_to_outer_scope_menu_item = (Gtk.MenuItem) manager.get_widget(
             "/MenuBar/SearchMenu/SearchOps_8/SearchGoToEnclosingMethodMenu");
@@ -1019,7 +573,8 @@ class Instance : Object {
     // TODO: Merge this method with saved_callback, below.
     static void all_save_callback(Gedit.Document document, void *arg1, Instance instance) {
         string path = document_filename(document);
-           Program.update_any(path, buffer_contents(document));
+        Program.update_any(path, buffer_contents(document));
+        instance.symbol_browser.on_document_saved();
     }
     
     bool scroll_to_end() {
@@ -1208,7 +763,7 @@ class Instance : Object {
         instance.on_document_loaded(document);
     }
 
-    void jump(string filename, Destination dest) {
+    public void jump(string filename, Destination dest) {
         Gedit.Window w;
         Gedit.Tab tab = find_tab(filename, out w);
         if (tab != null) {
@@ -1337,16 +892,19 @@ class Instance : Object {
         browsing_history = false;
     }
     
-    void get_buffer_str_and_pos(string filename, out weak string source, out int pos) {
+    public void reparse_modified_documents(string filename) {
         Program program = Program.find_containing(filename, true);
 
-        // Reparse any modified documents in this program.
         foreach (Gedit.Document d in Gedit.App.get_default().get_documents())
             if (d.get_modified()) {
                 string path = document_filename(d);
                 if (path != null)
                     program.update(path, buffer_contents(d));
             }
+    }
+    
+    void get_buffer_str_and_pos(string filename, out weak string source, out int pos) {
+        reparse_modified_documents(filename);
         
         Gedit.Document document = window.get_active_document();
         source = buffer_contents(document);
@@ -1521,7 +1079,7 @@ class Instance : Object {
         return true;
     }
 
-    string active_filename() {
+    public string active_filename() {
         Gedit.Document document = window.get_active_document();
         return document == null ? null : document_filename(document);
     }
@@ -1616,7 +1174,7 @@ class Instance : Object {
         return Program.find_containing(filename);
     }
 
-    bool active_document_is_valid_vala_file() {
+    public bool active_document_is_valid_vala_file() {
         string filename = active_filename();
         return filename != null && Program.is_vala(filename);
     }
@@ -1926,6 +1484,18 @@ class Instance : Object {
     }
 
 ////////////////////////////////////////////////////////////
+//                      Find Symbol                       //
+////////////////////////////////////////////////////////////
+
+    void on_find_symbol() {
+        string filename = active_filename();
+        if (filename == null || !Program.is_vala(filename))
+            return;
+    
+        symbol_browser.set_parent_instance_focus();
+    }
+
+////////////////////////////////////////////////////////////
 //           Menu activation and plugin class             //
 ////////////////////////////////////////////////////////////
 
@@ -1942,6 +1512,7 @@ class Instance : Object {
     void on_search_menu_activated() {
         bool document_is_vala_file = active_document_is_valid_vala_file();
         go_to_definition_menu_item.set_sensitive(document_is_vala_file);
+        find_symbol_menu_item.set_sensitive(document_is_vala_file);
         go_to_outer_scope_menu_item.set_sensitive(document_is_vala_file);
         
         go_back_menu_item.set_sensitive(can_go_back());
