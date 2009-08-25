@@ -4,6 +4,8 @@
  * (version 2.1 or later).  See the COPYING file in this distribution. 
  */
 
+using Gee;
+
 ////////////////////////////////////////////////////////////
 //                    Helper functions                    //
 ////////////////////////////////////////////////////////////
@@ -161,6 +163,42 @@ class ProgressBarDialog : Gtk.Window {
     
     public void close() {
         hide();
+    }
+}
+
+class SignalConnection : Object {
+    public class SignalIDPair {
+        public weak Object object;
+        public ulong id;
+        
+        public SignalIDPair(Object object, ulong id) {
+            this.object = object;
+            this.id = id;
+        }
+    }
+
+    public weak Object base_instance;
+    ArrayList<SignalIDPair> instance_signal_id_pair;
+
+    public SignalConnection(Object base_instance) {
+        this.base_instance = base_instance;
+        instance_signal_id_pair = new ArrayList<SignalIDPair>();
+    }
+
+    ~SignalConnection() {
+        foreach (SignalIDPair pair in instance_signal_id_pair) {
+            if (SignalHandler.is_connected(pair.object, pair.id))
+                SignalHandler.disconnect(pair.object, pair.id);
+        }
+    }
+
+    public void add_signal(Object instance, string signal_name, Callback cb, void *data,
+                           bool after = false) {
+        ulong id;
+        if (after)
+            id = Signal.connect_after(instance, signal_name, cb, data);
+        else id = Signal.connect(instance, signal_name, cb, data);
+        instance_signal_id_pair.add(new SignalIDPair(instance, id));
     }
 }
 
@@ -418,4 +456,3 @@ class ListViewString : Object {
     }
     
 }
-

@@ -206,7 +206,8 @@ class Instance : Object {
     AutocompleteDialog autocomplete;
 
     // Signal handlers
-    GLib.SList<Pair<weak GLib.Object, ulong>> signal_handler_list;
+    SignalConnection instance_connections;
+    ArrayList<SignalConnection> tab_connections;
     
     // Display enclosing class in statusbar
     int old_cursor_offset;
@@ -236,7 +237,7 @@ class Instance : Object {
           "Build the project", on_build },
         { "ProjectRun", Gtk.STOCK_EXECUTE, "_Run", "<ctrl><alt>r",
             "Build the project", on_run },
-        { "ProjectSettings", Gtk.STOCK_PROPERTIES, "_Settings", "",
+        { "ProjectSettings", Gtk.STOCK_PROPERTIES, "_Settings", "<ctrl><alt>t",
           "Customize the build command", on_project_settings }
     };
 
@@ -325,6 +326,10 @@ class Instance : Object {
         
         // Enclosing class in statusbar
         old_cursor_offset = 0;
+
+        // Signal connections
+        instance_connections = new SignalConnection(this);
+        tab_connections = new ArrayList<SignalConnection>();
         
         // Toolbar menu
         Gtk.UIManager manager = window.get_ui_manager();
@@ -392,50 +397,44 @@ class Instance : Object {
 
         init_error_regex();
 
-        add_signal(window, "tab-added", (Callback) tab_added_callback);
-        add_signal(window, "tab-removed", (Callback) tab_removed_callback);
-    }
-
-    ~Instance() {
-        foreach (Pair<GLib.Object, ulong> pair in signal_handler_list) {
-            if (SignalHandler.is_connected(pair.first, pair.second))
-                SignalHandler.disconnect(pair.first, pair.second);
-        }
-    }
-    
-    void add_signal(GLib.Object instance, string signal_name, GLib.Callback cb, 
-                    bool after = false) {
-        ulong id;
-        if (!after)
-            id = Signal.connect(instance, signal_name, cb, this);
-        else id = Signal.connect_after(instance, signal_name, cb, this);
-        signal_handler_list.append(new Pair<GLib.Object, ulong>(instance, id));
+        instance_connections.add_signal(window, "tab-added", (Callback) tab_added_callback, this);
+        instance_connections.add_signal(window, "tab-removed", (Callback) tab_removed_callback, this);
     }
 
     static void tab_added_callback(Gedit.Window window, Gedit.Tab tab, Instance instance) {
+        SignalConnection connection = new SignalConnection(tab);
+        instance.tab_connections.add(connection);
+        
         Gedit.Document document = tab.get_document();
-        instance.add_signal(document, "saved", (Callback) all_save_callback);
+        connection.add_signal(document, "saved", (Callback) all_save_callback, instance);
 
         // Hook up this particular tab's view with tooltips
         Gedit.View tab_view = tab.get_view();
-        instance.add_signal(tab_view, "key-press-event", (Callback) key_press_callback);
+        connection.add_signal(tab_view, "key-press-event", (Callback) key_press_callback, instance);
         
         Gtk.Widget widget = tab_view.get_parent();
         Gtk.ScrolledWindow scrolled_window = widget as Gtk.ScrolledWindow;
         assert(scrolled_window != null);
         
         Gtk.Adjustment vert_adjust = scrolled_window.get_vadjustment();
-        instance.add_signal(vert_adjust, "value-changed", (Callback) scrolled_callback);
+        connection.add_signal(vert_adjust, "value-changed", (Callback) scrolled_callback, instance);
 
-        instance.add_signal(document, "insert-text", (Callback) text_inserted_callback, true);
-        instance.add_signal(document, "delete-range", (Callback) text_deleted_callback, true);
-        instance.add_signal(document, "cursor-moved", (Callback) cursor_moved_callback, true);
+        connection.add_signal(document, "insert-text", (Callback) text_inserted_callback, instance, true);
+        connection.add_signal(document, "delete-range", (Callback) text_deleted_callback, instance, true);
+        connection.add_signal(document, "cursor-moved", (Callback) cursor_moved_callback, instance, true);
         
-        instance.add_signal(tab_view, "focus-out-event", (Callback) focus_off_view_callback);
-        instance.add_signal(tab_view, "button-press-event", (Callback) button_press_callback);
+        connection.add_signal(tab_view, "focus-out-event", (Callback) focus_off_view_callback, instance);
+        connection.add_signal(tab_view, "button-press-event", (Callback) button_press_callback, instance);
     }
 
     static void tab_removed_callback(Gedit.Window window, Gedit.Tab tab, Instance instance) {
+        foreach (SignalConnection connection in instance.tab_connections) {
+            if (connection.base_instance == tab) {
+                instance.tab_connections.remove(connection);
+                break;
+            }
+        }
+    
         Gedit.Document document = tab.get_document();
 
         if (document.get_modified()) {
@@ -1473,8 +1472,7 @@ class Instance : Object {
     void on_project_settings() {
         string filename = active_filename();
 
-        if (filename != null &&
-            (program_exists_for_active_document() || active_document_is_valid_vala_file()))
+        if (filename != null)
             settings_dialog.show(filename);
     }
     
@@ -1543,9 +1541,7 @@ class Instance : Object {
             run_menu_item.set_sensitive(false);
         }
 
-        settings_menu_item.set_sensitive(active_file_not_null && 
-                                         (program_exists_for_active_document() || 
-                                         active_document_is_valid_vala_file()));
+        settings_menu_item.set_sensitive(active_file_not_null);
     }
 
     public void deactivate() {

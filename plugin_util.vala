@@ -13,10 +13,12 @@ class AutocompleteDialog : Object {
     ListViewString list;
     bool visible;
     string partial_name;
+    bool inserting_text;
 
     public AutocompleteDialog(Gedit.Window parent_win) {
         parent = parent_win;
         visible = false;
+        inserting_text = false;
         list = new ListViewString(Gtk.TreeViewColumnSizing.AUTOSIZE, 100);
         list.row_activated += select_item;
 
@@ -53,7 +55,7 @@ class AutocompleteDialog : Object {
         while (true) {
             start.backward_char();
             unichar c = start.get_char();
-            if (!c.isalnum() && c != '.')
+            if (!c.isalnum() && c != '.' && c != '_')
                 break;
         }
         // Only include characters in the ID name
@@ -147,6 +149,9 @@ class AutocompleteDialog : Object {
     }
 
     public void show(SymbolSet symbol_set) {
+        if (inserting_text)
+            return;
+
         list.clear();
         visible = true;
         partial_name = symbol_set.get_name();
@@ -226,32 +231,39 @@ class AutocompleteDialog : Object {
         string selection = list.get_selected_item();
         Gedit.Document buffer = parent.get_active_document();
 
-        // delete the whole string at the cursor and replace it (the case may not match)
+        // delete the whole string to be autocompleted and replace it (the case may not match)
         Gtk.TextIter start = get_insert_iter(buffer);
-        if (start.get_char().isspace())
-            start.backward_char();
-
         while (true) {
+            if (!start.backward_char())
+                break;
             unichar c = start.get_char();
             if (!c.isalnum() && c != '_')
                 break;
-            if (!start.backward_char())
-                break;
         }
-        start.forward_char(); // don't include the nonalphanumeric character
+        // don't include the nonalphanumeric character
+        start.forward_char();
 
         Gtk.TextIter end = start;
         while (true) {
             unichar c = end.get_char();
-            if (!c.isalnum() && c != '_' && c != '.' && c != '(')
+            if (c == '(') {
+                end.forward_char();
+                break;
+            }
+            if (!c.isalnum() && c != '_' && c != '.')
                 break;
             if (!end.forward_char())
                 break;
         }
+
+        // Text insertion/deletion signals have been linked to updating the autocomplete dialog -
+        // we don't want to do that if we're already inserting text.
+        inserting_text = true;
         buffer.delete(start, end);
 
         long offset = selection.has_suffix(")") ? 1 : 0;
         buffer.insert_at_cursor(selection, (int) (selection.length - offset));
+        inserting_text = false;
 
         hide();
     }
@@ -274,18 +286,18 @@ class ProjectSettingsDialog : Object {
 
         Gtk.HBox command_box = new Gtk.HBox(false, 12);
         command_box.pack_start(build_command_label, false, false, 0);
-        command_box.pack_start(build_entry, false, false, 0);
+        command_box.pack_start(build_entry, true, true, 0);
 
         Gtk.Alignment alignment_box = new Gtk.Alignment(0.5f, 0.5f, 1.0f, 1.0f);
         alignment_box.set_padding(5, 6, 6, 5);
         alignment_box.add(command_box);
 
         dialog = new Gtk.Dialog.with_buttons("Settings", parent_win, Gtk.DialogFlags.MODAL |
-                                             Gtk.DialogFlags.DESTROY_WITH_PARENT,
-                                             Gtk.STOCK_OK, Gtk.ResponseType.OK,
-                                             Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-                                             null);
-
+                                             Gtk.DialogFlags.DESTROY_WITH_PARENT, 
+                                             Gtk.STOCK_OK, Gtk.ResponseType.OK, 
+                                             Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, null);
+        dialog.set_default_response(Gtk.ResponseType.OK);
+        dialog.set_default_size(350, 10);
         dialog.delete_event += dialog.hide_on_delete;
 
         dialog.vbox.pack_start(alignment_box, false, false, 0);
@@ -511,6 +523,4 @@ class SymbolBrowser {
     }
 
 }
-
-
 
