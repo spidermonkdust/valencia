@@ -14,7 +14,7 @@ DIST_TAR = $(PLUGIN)-$(VERSION).tar
 DIST_TAR_BZ2 = $(DIST_TAR).bz2
 
 libvalencia.so: $(SOURCES)
-	@ pkg-config --print-errors --exists vala-1.0 gee-1.0 gedit-2.20 vte
+	@ pkg-config --print-errors --exists vala-1.0 gedit-2.20 vte
 	$(VALAC) -X --shared -X -fPIC --vapidir=. $(LIBS) $^ -o $@
 
 install:
