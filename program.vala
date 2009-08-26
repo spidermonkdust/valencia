@@ -129,8 +129,9 @@ public class SymbolSet : Object {
 
     public unowned HashSet<Symbol>? get_symbols() {
         // It doesn't make sense to display the exact match of a partial search if there is only
-        // one symbol found that matches perfectly 
-        if (symbols.size == 0 || (symbols.size == 1 && !exact && first().name == name))
+        // one symbol found that matches perfectly (only for autocomplete!)
+        if (symbols.size == 0 || (symbols.size == 1 && !exact && !local_symbols &&
+            first().name == name))
             return null;
 
         return symbols;
@@ -697,6 +698,7 @@ public class SourceFile : Node, Scope {
                 Id id = (Id) name;
                 symbols = new SymbolSet(id.name, find_type, exact, constructor, local_symbols);
                 chain.lookup(symbols, pos);
+                
                 return symbols;        
             }
 

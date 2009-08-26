@@ -208,10 +208,14 @@ class Instance : Object {
     // Signal handlers
     SignalConnection instance_connections;
     ArrayList<SignalConnection> tab_connections;
-    
+
     // Display enclosing class in statusbar
     int old_cursor_offset;
-  
+
+    // Keeps track of all open documents' previous modified state
+    static HashMap<weak Gedit.Document, bool> documents_modified_state = 
+        new HashMap<weak Gedit.Document, bool>();
+
     // Menu item entries
     const Gtk.ActionEntry[] entries = {
         { "SearchGoToDefinition", null, "Go to _Definition", "F12",
@@ -402,11 +406,11 @@ class Instance : Object {
     }
 
     static void tab_added_callback(Gedit.Window window, Gedit.Tab tab, Instance instance) {
+        Gedit.Document document = tab.get_document();
+        documents_modified_state.set(document, false);
+    
         SignalConnection connection = new SignalConnection(tab);
         instance.tab_connections.add(connection);
-        
-        Gedit.Document document = tab.get_document();
-        connection.add_signal(document, "saved", (Callback) all_save_callback, instance);
 
         // Hook up this particular tab's view with tooltips
         Gedit.View tab_view = tab.get_view();
@@ -419,6 +423,7 @@ class Instance : Object {
         Gtk.Adjustment vert_adjust = scrolled_window.get_vadjustment();
         connection.add_signal(vert_adjust, "value-changed", (Callback) scrolled_callback, instance);
 
+        connection.add_signal(document, "saved", (Callback) all_save_callback, instance);
         connection.add_signal(document, "insert-text", (Callback) text_inserted_callback, instance, true);
         connection.add_signal(document, "delete-range", (Callback) text_deleted_callback, instance, true);
         connection.add_signal(document, "cursor-moved", (Callback) cursor_moved_callback, instance, true);
@@ -428,6 +433,10 @@ class Instance : Object {
     }
 
     static void tab_removed_callback(Gedit.Window window, Gedit.Tab tab, Instance instance) {
+        weak Gedit.Document removed_document = tab.get_document();
+        bool document_exists_in_map = documents_modified_state.remove(removed_document);
+        assert(document_exists_in_map);
+
         foreach (SignalConnection connection in instance.tab_connections) {
             if (connection.base_instance == tab) {
                 instance.tab_connections.remove(connection);
@@ -894,12 +903,19 @@ class Instance : Object {
     public void reparse_modified_documents(string filename) {
         Program program = Program.find_containing(filename, true);
 
-        foreach (Gedit.Document d in Gedit.App.get_default().get_documents())
-            if (d.get_modified()) {
-                string path = document_filename(d);
-                if (path != null)
-                    program.update(path, buffer_contents(d));
-            }
+        foreach (Gedit.Document document in Gedit.App.get_default().get_documents()) {
+            assert(documents_modified_state.contains(document));
+            bool previously_modified = documents_modified_state.get(document);
+            bool currently_modified = document.get_modified();
+            documents_modified_state.set(document, currently_modified);
+            
+            if (!currently_modified && !previously_modified)
+                continue;
+            
+            string path = document_filename(document);
+            if (path != null)
+                program.update(path, buffer_contents(document));
+        }
     }
     
     void get_buffer_str_and_pos(string filename, out weak string source, out int pos) {
