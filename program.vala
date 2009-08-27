@@ -1214,6 +1214,7 @@ public class Program : Object {
         for (int i = 0; i < 3; ++i) {
             if (!parse_vala_file(system_sources)) {
                 parsing = false;
+                sort_system_files();
                 system_parse_complete();
                 return false;
             }
@@ -1275,12 +1276,6 @@ public class Program : Object {
             if (file == null)
                 break;
 
-            // doesn't parse posix files to avoid built-in type vala profile conflicts (posix.vapi
-            // contains definitions for 'int', jumping to definition may open posix.vapi instead
-            // of glib.vapi            
-            if (file == "posix.vapi") 
-                continue;
-
             string path = Path.build_filename(directory, file);
 
             if (is_vala(file)) {
@@ -1314,6 +1309,31 @@ public class Program : Object {
             parse_list_index = 0;
             sourcefile_paths.clear();
             GLib.Idle.add(this.parse_system_vala_files_idle_callback);
+        }
+    }
+    
+    void sort_system_files() {
+        // puts glib.vapi first in the list to avoid built-in type vala profile conflicts 
+        // (posix.vapi contains definitions for 'int', jumping to definition may open posix.vapi
+        // instead of glib.vapi. Perhaps one day we will be smart enough to know which profile
+        // to use)
+        
+        for (int i = 0; i < system_sources.size; ++i) {
+            SourceFile glib_file = system_sources.get(i);
+            assert(glib_file != null);
+
+            if (!glib_file.filename.has_suffix("glib-2.0.vapi"))
+                continue;
+            
+            if (i == 0)
+                return;
+            
+            SourceFile swap_file = system_sources.get(0);
+            assert(swap_file != null);
+            
+            system_sources.set(0, glib_file);
+            system_sources.set(i, swap_file);
+            break;
         }
     }
     

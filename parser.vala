@@ -336,6 +336,7 @@ public class Parser : Object {
                     return parse_method(new Constructor(qualified_type.right, enclosing_class, source), input);
             }
         }
+        
         if (!accept(Token.ID)) {
             skip();
             return null;
@@ -489,8 +490,8 @@ public class Parser : Object {
         if (container_type == Token.ENUM) {
             while (true) {
                 skip_attributes();
-                 if (!accept(Token.ID))
-                     break;
+                if (!accept(Token.ID))
+                    break;
                 Field f = new Field(new Id(name), scanner.val(), source, scanner.start, 0);
                 if (accept(Token.EQUALS))
                     skip_expression();
@@ -595,8 +596,6 @@ public class Parser : Object {
             Token t = scanner.next_token();
             if (t == Token.EOF)
                 break;
-            //if (t == Token.THIS) // the name could be a member of a class
-            //    accept(Token.PERIOD);
             if (t == Token.NEW)
                 in_new = true;
             else if (t == Token.ID || t == Token.THIS || t == Token.BASE) {

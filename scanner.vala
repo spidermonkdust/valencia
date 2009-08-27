@@ -72,6 +72,7 @@ class Scanner : Object {
     Token token = Token.NONE;
     
     weak string token_start_char;
+    weak string input_begin;
     weak string input;
     
     int token_start;
@@ -86,6 +87,7 @@ class Scanner : Object {
     
     public Scanner(string input) {
         this.input = input;
+        input_begin = input;
     }
 
     void advance() {
@@ -131,15 +133,54 @@ class Scanner : Object {
             if (next_char() == '"' && accept('"') && accept('"'))
                 return;
     }
+    
+    void skip_line() {
+      while (input != "") {
+          unichar c = next_char();
+          if (c == '\n')
+              break;
+      }
+    }
+    
+    bool is_first_token_on_line() {
+        weak string line = input;
+        // Go back to the '#' character
+        line = line.prev_char();
+        if (direct_equal(line, input_begin))
+            return true;
+
+        while (true) {
+            line = line.prev_char();
+            unichar c = line.get_char();
+            if (direct_equal(line, input_begin) && c.isspace())
+                return true;
+            else if (c == '\n')
+                return true;
+            else if (!c.isspace())
+                return false;
+        }
+    }
 
     Token read_token() {
         while (input != "") {
             token_start_char = input;
             token_start = input_pos;
             unichar c = next_char();
+
             if (c.isspace())
                 continue;
-            if (c.isalpha() || c == '_') {        // identifier start
+            
+            bool accept_all_chars_as_id = false;
+            if (c == '@') {
+                accept_all_chars_as_id = true;
+                c = next_char();
+                // Don't include the '@' in ID's
+                token_start_char = input;
+                token_start = input_pos;
+            }
+
+            // identifier start
+            if (c.isalpha() || c == '_' || (accept_all_chars_as_id && c.isalnum())) { 
                 while (true) {
                     c = peek_char();
                     if (!c.isalnum() && c != '_')
@@ -204,7 +245,11 @@ class Scanner : Object {
                 case ':': return Token.COLON;
                 case ',': return Token.COMMA;
                 case '=': return Token.EQUALS;
-                case '#': return Token.HASH;
+                case '#': 
+                    if (is_first_token_on_line()) {
+                        skip_line();
+                        continue;
+                    } else return Token.HASH;
                 case '(': return Token.LEFT_PAREN;
                 case ')': return Token.RIGHT_PAREN;
                 case '.':
@@ -261,7 +306,7 @@ class Scanner : Object {
         peek_token();
         return token_start_char;
     }
-
+    
 }
 
 }

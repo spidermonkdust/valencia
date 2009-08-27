@@ -237,9 +237,8 @@ class ListViewString : Object {
     
     bool on_recieved_focus() {
         Gtk.TreePath? path = get_path_at_cursor();
-        if (path == null)
+        if (path != null)
             path = select_first_cell();
-
         recieved_focus(path);
         return false;
     }

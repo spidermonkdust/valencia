@@ -459,7 +459,7 @@ class SymbolBrowser {
         if (document_path == null || !Program.is_vala(document_path))
             return;
         
-        Program program = Program.find_containing(document_path, true);
+        Program program = Program.find_containing(document_path);
 
         if (program.is_parsing())
             program.system_parse_complete += update_symbols;
