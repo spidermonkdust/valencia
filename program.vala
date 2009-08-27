@@ -883,20 +883,47 @@ public class Makefile : Object {
 public class ConfigurationFile : Object {
     weak Program parent_program;
 
-    const string build_command_keyword = "build_command";
     const string version_keyword = "version";
-    const string version = "0";
+    const string version = "1";
+    const string build_command_keyword = "build_command";
+    const string clean_command_keyword = "clean_command";
+    const string default_build_command = "make";
+    const string default_clean_command = "make clean";
 
     string build_command;
+    string clean_command;
+
+    enum MatchValue {
+        MATCHED,
+        UNMATCHED,
+        ERROR        
+    }
 
     public ConfigurationFile(Program parent_program) {
         this.parent_program = parent_program;
         build_command = null;
+        clean_command = null;
     }
     
     string get_file_path() {
         return Path.build_filename(parent_program.get_top_directory(), ".valencia");
     }
+
+/*    MatchValue match(string keyword, string master_keyword, string val, ref string master_val, 
+                     bool matched) {
+        if (keyword == master_keyword) {
+            if (!matched) {
+                if (val != null) {
+                    master_val = val;
+                    return MatchValue.MATCHED;
+                } else {
+                    warning("Incorrect file format, ignoring...\n");
+                    return MatchValue.ERROR;
+                }
+            }
+        }
+        return MatchValue.UNMATCHED;
+    }*/
 
     void load() {
         string file_path = get_file_path();
@@ -923,7 +950,8 @@ public class ConfigurationFile : Object {
 
         string[] lines = contents.split("\n");
         bool matched_version = false;
-        bool matched_build_command = false;
+        bool matched_build = false;
+        bool matched_clean = false;
 
         foreach (string line in lines) {
             // Ignore lines with whitespace
@@ -942,33 +970,61 @@ public class ConfigurationFile : Object {
             string match2 = match_info.fetch(2);
 
             // Only match the version on the first line with text, any other line is a parse error
-            if (!matched_build_command && match1 == version_keyword && match2 == version) {
+            if (!matched_build && !matched_clean && match1 == version_keyword && match2 == version) {
                 matched_version = true;
                 continue;
             } else if (!matched_version) {
                 warning("Mismatched config file version, ignoring...\n");
                 return;
             }
-
-            if (match1 == build_command_keyword) {
-                if (!matched_build_command && match2 != null) {
-                    build_command = match2;
-                } else {
-                    warning("Incorrect file format, ignoring...\n");
-                    return;
-                }
+            
+            if (match1 == build_command_keyword && match2 != null && build_command == null)
+                build_command = match2;
+            else if (match1 == clean_command_keyword && match2 != null && clean_command == null)
+                clean_command = match2;
+            else {
+                warning("Incorrect file format, ignoring...\n");
+                return;
             }
         }
+    }
+    
+    string[] split_for_argv(string? command, string default_command) {
+        string[] argv;
+        if (command != null)
+            argv = command.split(" ");
+        else {
+            argv = new string[1];
+            argv[0] = default_command;
+        }
+        argv += null;
+        return argv;
     }
 
     public string? get_build_command() {
         if (build_command == null)
             load();
+            
         return build_command;
     }
 
-    public void update(string new_build_command) {
+    public string? get_clean_command() {
+        if (clean_command == null)
+            load();
+        return clean_command;
+    }
+    
+    public string[] get_build_args() {
+        return split_for_argv(get_build_command(), default_build_command);
+    }
+    
+    public string[] get_clean_args() {
+        return split_for_argv(get_clean_command(), default_clean_command);
+    }
+
+    public void update(string new_build_command, string new_clean_command) {
         build_command = new_build_command;
+        clean_command = new_clean_command;
     
         string file_path = get_file_path();
         FileStream file = FileStream.open(file_path, "w");
@@ -980,6 +1036,7 @@ public class ConfigurationFile : Object {
         
         file.printf("%s = %s\n", version_keyword, version);
         file.printf("%s = %s\n", build_command_keyword, build_command);
+        file.printf("%s = %s\n", clean_command_keyword, clean_command);
     }
 
     public void update_location(string old_directory) {

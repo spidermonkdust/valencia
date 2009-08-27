@@ -158,6 +158,7 @@ class Instance : Object {
     Gtk.MenuItem prev_error_menu_item;
     Gtk.MenuItem display_tooltip_menu_item;
     Gtk.MenuItem build_menu_item;
+    Gtk.MenuItem clean_menu_item;
     Gtk.MenuItem run_menu_item;
     Gtk.MenuItem settings_menu_item;
 
@@ -175,6 +176,9 @@ class Instance : Object {
     Gtk.TextBuffer output_buffer;
     Gtk.TextView output_view;
     Gtk.ScrolledWindow output_pane;
+    
+    delegate bool ProcessFinished();
+    ProcessFinished on_process_finshed;
 
     // Settings dialog
     ProjectSettingsDialog settings_dialog;
@@ -239,10 +243,12 @@ class Instance : Object {
 
         { "ProjectBuild", Gtk.STOCK_CONVERT, "_Build", "<ctrl><alt>b",
           "Build the project", on_build },
+        { "ProjectClean", Gtk.STOCK_CLEAR, "_Clean", "<ctrl><alt>c",
+          "Clean build output", on_clean },
         { "ProjectRun", Gtk.STOCK_EXECUTE, "_Run", "<ctrl><alt>r",
-            "Build the project", on_run },
+          "Run the program", on_run },
         { "ProjectSettings", Gtk.STOCK_PROPERTIES, "_Settings", "<ctrl><alt>t",
-          "Customize the build command", on_project_settings }
+          "Customize the build and clean commands", on_project_settings }
     };
 
     const string ui = """
@@ -265,6 +271,7 @@ class Instance : Object {
             <placeholder name="ExtraMenu_1">
               <menu name="ProjectMenu" action="Project">
                 <menuitem name="ProjectBuildMenu" action="ProjectBuild"/>
+                <menuitem name="ProjectCleanMenu" action="ProjectClean"/>
                 <menuitem name="ProjectRunMenu" action="ProjectRun"/>
                 <menuitem name="ProjectSettingsMenu" action="ProjectSettings"/>
               </menu>
@@ -282,7 +289,7 @@ class Instance : Object {
               
         // Settings dialog
         settings_dialog = new ProjectSettingsDialog(window);
-        settings_dialog.build_command_changed += on_build_command_changed;
+        settings_dialog.settings_changed += on_settings_changed;
 
         // Tooltips        
         tip = new Tooltip(window);
@@ -391,11 +398,15 @@ class Instance : Object {
             "/MenuBar/ExtraMenu_1/ProjectMenu/ProjectBuildMenu");
         assert(build_menu_item != null);
         
+        clean_menu_item = (Gtk.MenuItem) manager.get_widget(
+            "/MenuBar/ExtraMenu_1/ProjectMenu/ProjectCleanMenu");
+        assert(build_menu_item != null);
+        
         run_menu_item = (Gtk.MenuItem) manager.get_widget(
             "/MenuBar/ExtraMenu_1/ProjectMenu/ProjectRunMenu");
-          assert(run_menu_item != null);
+        assert(run_menu_item != null);
 
-          settings_menu_item = (Gtk.MenuItem) manager.get_widget(
+        settings_menu_item = (Gtk.MenuItem) manager.get_widget(
               "/MenuBar/ExtraMenu_1/ProjectMenu/ProjectSettingsMenu");
         assert(run_menu_item != null);
 
@@ -607,11 +618,7 @@ class Instance : Object {
             }
             if (status == IOStatus.EOF) {
                 if (error) {
-                    append_with_tag(output_buffer, "\nBuild complete", italic_tag);
-                    appended = true;
-                    
-                    // Always regenerate the list *after* a new build
-                    generate_error_history(last_program_to_build);
+                    appended = on_process_finshed();
                 }
                 ret = false;
                 break;
@@ -632,6 +639,14 @@ class Instance : Object {
     
     bool on_build_stderr(IOChannel source, IOCondition condition) {
         return on_build_output(source, true);
+    }
+    
+    bool on_build_finished() {
+        append_with_tag(output_buffer, "\nBuild complete", italic_tag);
+
+        // Always regenerate the list *after* a new build
+        generate_error_history(last_program_to_build);
+        return true;
     }
   
     void hide_old_build_output() {
@@ -654,24 +669,10 @@ class Instance : Object {
         panel.activate_item(output_pane);
         panel.show();
     }
-
-    void build() {
-        string filename = get_active_document_filename();
-        
-        if (filename == null)
-            return;
-        
-        Program.rescan_build_root(filename);
-
-        // Record the last program to build in this window so that we don't accidentally hide
-        // output that isn't part of a program that gets built later
-        last_program_to_build = Program.find_containing(filename);
-        
-        hide_old_build_output();
-       
+    
+    void spawn_process(string[] argv, string working_directory, ProcessFinished callback) {
+        on_process_finshed = callback;
         output_buffer.set_text("", 0);
-
-        string[] argv = settings_dialog.get_build_command(filename);
         
         output_pane.show();
         Gedit.Panel panel = window.get_bottom_panel();
@@ -684,7 +685,7 @@ class Instance : Object {
         int error_fd;
         try {
         Process.spawn_async_with_pipes(
-            last_program_to_build.get_top_directory(),    // working directory
+            working_directory,    // working directory
             argv,
             null,   // environment
             SpawnFlags.SEARCH_PATH,
@@ -697,7 +698,7 @@ class Instance : Object {
             append_with_tag(output_buffer, "Could not execute ", italic_tag);
             append_with_tag(output_buffer, argv[0], bold_tag);
             append_with_tag(output_buffer, " in ", italic_tag);
-            append_with_tag(output_buffer, last_program_to_build.get_top_directory(), bold_tag);
+            append_with_tag(output_buffer, working_directory, bold_tag);
             return;
         }
         
@@ -708,7 +709,7 @@ class Instance : Object {
             append_with_tag(output_buffer, "There was an I/O error trying to run ", italic_tag);
             append_with_tag(output_buffer, argv[0], bold_tag);
             append_with_tag(output_buffer, " in ", italic_tag);
-            append_with_tag(output_buffer, last_program_to_build.get_top_directory(), bold_tag);
+            append_with_tag(output_buffer, working_directory, bold_tag);
             return;
         }
 
@@ -718,10 +719,29 @@ class Instance : Object {
                 append_with_tag(output_buffer, arg + " ", bold_tag);
         }
         append_with_tag(output_buffer, "in ", italic_tag);
-        append_with_tag(output_buffer, last_program_to_build.get_top_directory(), bold_tag);
+        append_with_tag(output_buffer, working_directory, bold_tag);
         append(output_buffer, "\n\n");
     }
-    
+
+    void build() {
+        string filename = get_active_document_filename();
+
+        if (filename == null)
+            return;
+
+        Program.rescan_build_root(filename);
+
+        // Record the last program to build in this window so that we don't accidentally hide
+        // output that isn't part of a program that gets built later
+        last_program_to_build = Program.find_containing(filename);
+
+        hide_old_build_output();
+
+        string[] argv = last_program_to_build.config_file.get_build_args();
+
+        spawn_process(argv, last_program_to_build.get_top_directory(), on_build_finished);
+    }
+
     void on_saved() {
         if (--saving == 0)
             build();
@@ -1492,9 +1512,9 @@ class Instance : Object {
             settings_dialog.show(filename);
     }
     
-    void on_build_command_changed(string new_build_command) {
+    void on_settings_changed(string new_build_command, string new_clean_command) {
         Program program = get_active_document_program();
-        program.config_file.update(new_build_command);
+        program.config_file.update(new_build_command, new_clean_command);
     }
 
 ////////////////////////////////////////////////////////////
@@ -1508,6 +1528,25 @@ class Instance : Object {
     
         symbol_browser.set_parent_instance_focus();
     }
+    
+////////////////////////////////////////////////////////////
+//                    Clean command                       //
+////////////////////////////////////////////////////////////
+
+bool on_clean_finished() {
+    append_with_tag(output_buffer, "\nClean complete", italic_tag);
+    return true;
+}
+
+void on_clean() {
+    string filename = active_filename();
+    Program program = Program.find_containing(filename);
+
+    string working_directory = program.get_top_directory();
+    string[] argv = program.config_file.get_clean_args();
+    
+    spawn_process(argv, working_directory, on_clean_finished);
+}
 
 ////////////////////////////////////////////////////////////
 //           Menu activation and plugin class             //
