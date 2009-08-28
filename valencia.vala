@@ -143,6 +143,27 @@ class CharRange : Destination {
     }    
 }
 
+class ScanInfo : Object {
+    public Method? method;
+    public Expression? partial_name_at_cursor;
+    public Expression? name_at_cursor;
+    public MethodScanInfo method_info;
+    public int cursor_pos;
+    
+    public ScanInfo(Method? method, Expression? name_at_cursor, Expression? partial_name_at_cursor,
+                    MethodScanInfo method_info, int cursor_position) {
+        this.method = method;
+        this.name_at_cursor = name_at_cursor;
+        this.partial_name_at_cursor = partial_name_at_cursor;
+        this.method_info = method_info;
+        cursor_pos = cursor_position;
+    }
+    
+    public ScanInfo.empty() {
+        
+    }
+}
+
 class Instance : Object {
     public Gedit.Window window;
     Plugin plugin;
@@ -969,33 +990,20 @@ class Instance : Object {
         int pos;
         get_buffer_str_and_pos(filename, out source, out pos);
 
-        bool in_new;
-        Expression name = new Parser().name_at(source, pos, out in_new); 
-        if (name == null)
+        ScanInfo info = get_scan_info();
+        if (info == null || info.name_at_cursor == null)
             return;
-            
+
         Program program = Program.find_containing(filename);
         SourceFile sf = program.find_source(filename);
-        Symbol? sym = sf.resolve(name, pos, in_new);
+        Symbol? sym = sf.resolve(info.name_at_cursor, pos, info.method_info.autocomplete_new);
         if (sym == null)
             return;
 
         add_insert_cursor_to_history();
-        
-        SourceFile dest = sym.source;
-        if (sym.name == null) {
-            int length;
 
-            // Since unnamed constructors' names are null, just use the parent class' name
-            if (sym is Constructor) {
-                Constructor c = (Constructor) sym;
-                length = (int) c.parent.name.length;
-            } else length = (int) name.to_string().length;
-            
-            jump(dest.filename, new CharRange(sym.start, sym.start + length));
-        } else {
-            jump(dest.filename, new CharRange(sym.start, sym.start + (int) sym.name.length));
-        }
+        SourceFile dest = sym.source;
+        jump(dest.filename, new CharRange(sym.start, sym.start + sym.name_length()));
     }
     
     void on_go_to_outer_scope() {
@@ -1389,81 +1397,85 @@ class Instance : Object {
     }
 
     void display_tooltip_or_autocomplete() {
-        Method method;
-        MethodScanInfo info;
-        int cursor_pos;
-        Expression name_at_cursor;
-        get_tooltip_and_autocomplete_info(out method, out info, out cursor_pos, out name_at_cursor);
+        ScanInfo info = get_scan_info();
+        if (info == null)
+            return;
 
-        if (method != null)
-            tip.show(info.method_name.to_string(), " " + method.to_string() + " ", 
-                     info.method_start_position);  
+        if (info.method != null)
+            tip.show(info.method_info.method_name.to_string(), " " + info.method.to_string() + " ", 
+                     info.method_info.method_start_position);  
         else {
-            if (name_at_cursor == null)
-                name_at_cursor = new Id("");
+            if (info.partial_name_at_cursor == null)
+                info.partial_name_at_cursor = new Id("");
             
             string? filename = active_filename();
             Program program = Program.find_containing(filename);
             SourceFile sf = program.find_source(filename);
             
-            SymbolSet symbol_set = sf.resolve_prefix(name_at_cursor, cursor_pos, info.autocomplete_new);
+            SymbolSet symbol_set = sf.resolve_prefix(info.partial_name_at_cursor, info.cursor_pos, 
+                                                     info.method_info.autocomplete_new);
             autocomplete.show(symbol_set);
         }
     }
 
     void display_tooltip() {
-        Method method;
-        MethodScanInfo info;
-        int cursor_pos;
-        Expression name_at_cursor;
-        get_tooltip_and_autocomplete_info(out method, out info, out cursor_pos, out name_at_cursor);
+        ScanInfo info = get_scan_info();
+        if (info == null)
+            return;
     
-        if (method != null)
-            tip.show(info.method_name.to_string(), " " + method.to_string() + " ", 
-                     info.method_start_position);  
+        if (info.method != null)
+            tip.show(info.method_info.method_name.to_string(), " " + info.method.to_string() + " ", 
+                     info.method_info.method_start_position);  
     }
 
     void display_autocomplete() {
-        Method method;
-        MethodScanInfo info;
-        int cursor_pos;
-        Expression name_at_cursor;
-        get_tooltip_and_autocomplete_info(out method, out info, out cursor_pos, out name_at_cursor);
+        ScanInfo info = get_scan_info();
+        if (info == null)
+            return;
 
-        if (name_at_cursor == null)
-            name_at_cursor = new Id("");
+        if (info.partial_name_at_cursor == null)
+            info.partial_name_at_cursor = new Id("");
 
         string? filename = active_filename();
         Program program = Program.find_containing(filename);
         SourceFile sf = program.find_source(filename);
 
-        SymbolSet symbol_set = sf.resolve_prefix(name_at_cursor, cursor_pos, info.autocomplete_new);
+        SymbolSet symbol_set = sf.resolve_prefix(info.partial_name_at_cursor, info.cursor_pos, 
+                                                 info.method_info.autocomplete_new);
 
         autocomplete.show(symbol_set);
     }
 
-    void get_tooltip_and_autocomplete_info(out Method? method, out MethodScanInfo info, 
-                                           out int cursor_pos, out Expression? name_at_cursor) {
+    ScanInfo? get_scan_info() {
+        Method? method;
+        Expression? partial_name_at_cursor;
+        Expression? name_at_cursor;
+        MethodScanInfo method_info;
+        int cursor_pos;
+    
         string? filename = active_filename();
         weak string source;
         get_buffer_str_and_pos(filename, out source, out cursor_pos); 
 
-        info = new Parser().method_at(source, cursor_pos, out name_at_cursor);
+        method_info = new Parser().method_at(source, cursor_pos, out partial_name_at_cursor, 
+                                             out name_at_cursor);
 
         Program program = Program.find_containing(filename);
         SourceFile sf = program.find_source(filename);
         // The sourcefile may be null if the file is a vala file but hasn't been saved to disk
         if (sf == null)
-            return;
+            return null;
 
         // Give the method tooltip precedence over autocomplete
         method = null;
-        if (info.method_name != null && 
-            (!tip.is_visible() || cursor_is_inside_different_function(info.method_start_position))) {
-            Symbol? sym = sf.resolve(info.method_name, cursor_pos, info.tooltip_new);
+        if (method_info.method_name != null && 
+            (!tip.is_visible() || cursor_is_inside_different_function(method_info.method_start_position))) {
+            Symbol? sym = sf.resolve(method_info.method_name, cursor_pos, method_info.tooltip_new);
             if (sym != null)
                 method = sym as Method; 
         }
+
+        return new ScanInfo(method, name_at_cursor, partial_name_at_cursor, method_info, cursor_pos);
     }
 
     bool cursor_is_inside_different_function(int method_pos) {

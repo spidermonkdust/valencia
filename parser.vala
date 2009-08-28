@@ -22,16 +22,21 @@ public class ScanScope : Object {
 
 public class MethodScanInfo : Object {
   public Expression method_name;
+  public MethodCall method_call;
   public int method_start_position;
   public bool tooltip_new;
   public bool autocomplete_new;
 
   public MethodScanInfo(Expression? method_name, int method_start_position, bool tooltip_new, 
                         bool autocomplete_new) {
-      this.method_name = method_name;
-      this.method_start_position = method_start_position;
-      this.tooltip_new = tooltip_new;
-      this.autocomplete_new = autocomplete_new;
+        this.method_name = method_name;
+        this.method_start_position = method_start_position;
+        this.tooltip_new = tooltip_new;
+        this.autocomplete_new = autocomplete_new;
+
+        if (method_name == null)
+            method_call = null;
+        else method_call = new MethodCall(method_name);
     }
 }
 
@@ -349,7 +354,7 @@ public class Parser : Object {
                 f.end = scanner.end;
                 return f;
             case Token.LEFT_PAREN:
-                Method m = new Method(scanner.val(), source);
+                Method m = new Method(scanner.val(), type, source);
                 return parse_method(m, input);
             case Token.LEFT_BRACE:
                 Property p = new Property(type, scanner.val(), source, scanner.start, 0);
@@ -596,136 +601,113 @@ public class Parser : Object {
         return s;
     }
 
-    public void parse(SourceFile source, string input) {
-        this.source = source;
-        scanner = new Scanner(input);
-        while (accept(Token.USING)) {
-            string s = parse_using();
-            if (s != null)
-                source.add_using_namespace(s);
-        }
-        current_namespace = source.top;
-        while (!scanner.eof()) {
-            Symbol s = parse_member(null) as Symbol;
-            if (s != null)
-                source.top.symbols.add(s);
-        }
-        source.top.end = scanner.end;
-    }
+     public void parse(SourceFile source, string input) {
+         this.source = source;
+         scanner = new Scanner(input);
+         while (accept(Token.USING)) {
+             string s = parse_using();
+             if (s != null)
+                 source.add_using_namespace(s);
+         }
+         current_namespace = source.top;
+         while (!scanner.eof()) {
+             Symbol s = parse_member(null) as Symbol;
+             if (s != null)
+                 source.top.symbols.add(s);
+         }
+         source.top.end = scanner.end;
+     }
 
-    public Expression? name_at(string input, int pos, out bool in_new) {
-        scanner = new Scanner(input);
-        while (scanner.end <= pos) {
-            Token t = scanner.next_token();
-            if (t == Token.EOF)
-                break;
-            if (t == Token.NEW)
-                in_new = true;
-            else if (t == Token.ID || t == Token.THIS || t == Token.BASE) {
-                Expression name;
-                if (t == Token.ID)
-                    name = new Id(scanner.val());
-                else if (t == Token.THIS)
-                    name = new This();
-                else {
-                    name = new Base();
-                    // If this is a function call, then the base constructor is being called
-                    if (peek_token() == Token.LEFT_PAREN)
-                        in_new = true;
-                }
-                
-                while (true) {
-                    if (scanner.end >= pos)
-                        return name;
-                    if (!accept(Token.PERIOD) || !accept(Token.ID))
-                        break;
-                    name = new CompoundExpression(name, scanner.val());
-                }
-            } else in_new = false;
-        }
-
-        in_new = false;
-        return null;
-    }
-
-    public MethodScanInfo? method_at(string input, int pos, out Expression? name_at_cursor) {
+    public MethodScanInfo? method_at(string input, int pos, out Expression? partial_name_at_cursor, 
+                                     out Expression? name_at_cursor) {
         Stack<MethodScanInfo> stack = new Stack<MethodScanInfo>();
         int free_left_parens = 0;
         bool tooltip_new = false;
         bool autocomplete_new = false;
 
         scanner = new Scanner(input);
-        while (scanner.end < pos) {
-            name_at_cursor = null;
+        while (scanner.end <= pos) {
             Token t = scanner.next_token();
+            
+            if (scanner.end < pos)
+                partial_name_at_cursor = null;
+            
             if (t == Token.EOF) {
                 break;
             } else if (t == Token.RIGHT_PAREN) {
                 // Try to match parentheses
                 if (stack.size() > 0 && free_left_parens == 0) {
+                    // save the MethodCall information, in case the next token is a period
+                    if (scanner.end < pos)
+                        name_at_cursor = stack.top().method_call;
                     stack.pop();
                 } else --free_left_parens;
-                name_at_cursor = null;
+                partial_name_at_cursor = null;
             } else if (t == Token.LEFT_PAREN) {
                 ++free_left_parens;
-                name_at_cursor = null;
+                partial_name_at_cursor = null;
             } else if (t == Token.NEW) {
                 tooltip_new = true;
                 autocomplete_new = true;
-            } else if (t == Token.ID || t == Token.THIS || t == Token.BASE) {
-                Expression name;
+            } else if (t == Token.ID || t == Token.THIS || t == Token.BASE || t == Token.PERIOD) {
                 if (t == Token.ID)
-                    name = new Id(scanner.val());
+                    name_at_cursor = new Id(scanner.val());
                 else if (t == Token.THIS)
-                    name = new This();
-                else {
-                    name = new Base();
+                    name_at_cursor = new This();
+                else if (t == Token.BASE) {
+                    name_at_cursor = new Base();
                 }
-                
+
                 if (scanner.end <= pos)
-                    name_at_cursor = name;
-                else if (scanner.start < pos) {
+                    partial_name_at_cursor = name_at_cursor;
+                else if (scanner.start < pos && t != Token.PERIOD) {
                     string partial = scanner.val_from_start_to_offset(pos - scanner.start);
-                    name_at_cursor = new Id(partial);
+                    partial_name_at_cursor = new Id(partial);
                 }
                 while (true) {
-                    if (scanner.end >= pos) {
+                    if (scanner.end > pos) {
                         if (stack.size() > 0) {
                             return stack.top();
                         }
                         return new MethodScanInfo(null, 0, tooltip_new, autocomplete_new);
                     }
 
-                    if (!accept(Token.PERIOD))
+                    // if t is a period, then the expression will contain a MethodCall
+                    if (!accept(Token.PERIOD) && t != Token.PERIOD)
                         break;
+                    t = Token.NONE;
 
                     // Include the period operator for member lookups when autocompleting
-                    name_at_cursor = new CompoundExpression(name, "");
+                    partial_name_at_cursor = new CompoundExpression(name_at_cursor, "");
 
                     if (!accept(Token.ID))
                         break;
 
                     if (scanner.end > pos && scanner.start < pos) {
                         string partial = scanner.val_from_start_to_offset(pos - scanner.start);
-                        name_at_cursor = new CompoundExpression(name, partial);
+                        partial_name_at_cursor = new CompoundExpression(name_at_cursor, partial);
                     }
                     
-                    name = new CompoundExpression(name, scanner.val());
+                    name_at_cursor = new CompoundExpression(name_at_cursor, scanner.val());
                     
                     if (scanner.end <= pos) {
-                        name_at_cursor = name;
+                        partial_name_at_cursor = name_at_cursor;
                     }
-
                 }
+
                 if (accept(Token.LEFT_PAREN)) {
                     autocomplete_new = false;
-                    stack.push(new MethodScanInfo(name, scanner.start, tooltip_new, autocomplete_new));
-                    name_at_cursor = null;
+                    stack.push(new MethodScanInfo(name_at_cursor, scanner.start, tooltip_new, 
+                                                  autocomplete_new));
+                    partial_name_at_cursor = null;
                     tooltip_new = false;
                 }
-            } else if (scanner.start < pos && t != Token.COMMA) {
-                tooltip_new = false;
-                autocomplete_new = false;
+              } else if (scanner.start < pos) {
+                name_at_cursor = null;
+                if (t != Token.COMMA) {
+                    tooltip_new = false;
+                    autocomplete_new = false;
+                }
             }
         }
 
@@ -736,8 +718,7 @@ public class Parser : Object {
         return new MethodScanInfo(null, 0, tooltip_new, autocomplete_new);
     }
 
-    // interfaces/classes/structs/enums, and methods count as enclosing scopes
-    // classes and methods count as enclosing scopes
+    // namespaces, interfaces/classes/structs/enums, and methods count as enclosing scopes
     public ScanScope? find_enclosing_scope(string input, int pos, bool classes_only) {
         scanner = new Scanner(input);
 

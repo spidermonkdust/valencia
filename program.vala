@@ -16,7 +16,7 @@ public class Id : Expression {
     public string name;
     
     public Id(string name) { 
-        this.name = name; 
+        this.name = name;
     }
     
     public override string to_string() {
@@ -33,6 +33,18 @@ public class This : Expression {
 public class Base : Expression {
     public override string to_string() {
         return "base";
+    }
+}
+
+public class MethodCall : Expression {
+    public Expression method;
+    
+    public MethodCall(Expression method) {
+        this.method = method;
+    }
+    
+    public override string to_string() {
+        return method.to_string() + "()";
     }
 }
 
@@ -58,7 +70,7 @@ public class SymbolSet : Object {
     bool constructor;
     bool local_symbols;
 
-    SymbolSet(string name, bool type, bool exact, bool constructor, bool local_symbols) {
+    public SymbolSet(string name, bool type, bool exact, bool constructor, bool local_symbols) {
         this.name = exact ? name : name.down(); // case-insensitive matching
         this.type = type;
         this.exact = exact;
@@ -69,6 +81,14 @@ public class SymbolSet : Object {
         // provide custom hash and equality functions
         symbols.hash_func = Symbol.hash;
         symbols.equal_func = Symbol.equal;
+    }
+
+    public SymbolSet.empty() {
+        name = "";
+        type = false;
+        exact = false;
+        constructor = false;
+        local_symbols = false;
     }
 
     void add_constructor(Symbol sym) {
@@ -215,6 +235,20 @@ public abstract class Symbol : Node {
     
     protected void print_name(int level, string s) {
         do_print(level, s + " " + name);
+    }
+    
+    public int name_length() {
+        int length = 0;
+        // Since unnamed constructors' names are null, just use the parent class' name
+        if (name == null) {
+            if (this is Constructor) {
+                Constructor c = (Constructor) this;
+                length = (int) c.parent.name.length;
+            }
+        } else {
+            length = (int) name.length;
+        }
+        return length;
     }
 
     public static uint hash(void *item) {
@@ -424,11 +458,13 @@ public class Construct : Node {
 
 public class Method : Symbol, Scope {
     public ArrayList<Parameter> parameters = new ArrayList<Parameter>();
+    public Expression return_type;
     public Block body;
     string prototype = "";
-    
-    public Method(string? name, SourceFile source) { 
+
+    public Method(string? name, Expression? return_type, SourceFile source) { 
         base(name, source, 0, 0); 
+        this.return_type = return_type;
     }
     
     public override ArrayList<Node>? children() { return single_node(body);    }
@@ -477,7 +513,7 @@ public class Constructor : Method {
     public weak Class parent;
 
     public Constructor(string? unqualified_name, Class parent, SourceFile source) { 
-        base(unqualified_name, source); 
+        base(unqualified_name, null, source); 
         this.parent = parent;
     }
     
@@ -582,7 +618,6 @@ public class Class : TypeSymbol, Scope {
     public string to_string() {
         return (enclosing_class != null) ? enclosing_class.to_string() + "." + name : name;
     }
-
 }
 
 public class Interface : Class {
@@ -684,30 +719,45 @@ public class SourceFile : Node, Scope {
         return false;
     }
 
+    public SymbolSet resolve_non_compound(Expression name, Chain chain, int pos, bool find_type,
+                                          bool exact, bool constructor, bool local_symbols) {
+        Symbol s;
+        SymbolSet symbols;
+        if (name is This) {
+            s = chain.lookup_this();
+        } else if (name is Base) {
+            s = chain.lookup_base(this);
+        } else if (name is MethodCall) {
+            // First find the method symbol... (doesn't support constructors yet)
+            MethodCall method_call = (MethodCall) name;
+            symbols = resolve1(method_call.method, chain, pos, false, exact, false, local_symbols);
+            s = symbols.first();
+            Method m = s as Method;
+            
+            // Then find the return type symbol of the method
+            if (m != null)
+                return resolve1(m.return_type, find(null, m.start), m.start, true, exact, false, local_symbols);
+            else return new SymbolSet.empty();
+        } else { // name is Id
+            Id id = (Id) name;
+            symbols = new SymbolSet(id.name, find_type, exact, constructor, local_symbols);
+            chain.lookup(symbols, pos);
+            return symbols;        
+        }
+
+        // this, base symbols
+        if (s != null) {
+            symbols = new SymbolSet(s.name, find_type, true, constructor, local_symbols);
+            symbols.add(s);
+        // return an "empty" set
+        } else symbols = new SymbolSet.empty();
+        return symbols;
+    }
+
     public SymbolSet resolve1(Expression name, Chain chain, int pos, bool find_type, bool exact, 
                               bool constructor, bool local_symbols) {
         if (!(name is CompoundExpression)) {
-            Symbol s;
-            SymbolSet symbols;
-            if (name is This) {
-                s = chain.lookup_this();
-            } else if (name is Base) {
-                s = chain.lookup_base(this);
-            } else { // name is Id
-                Id id = (Id) name;
-                symbols = new SymbolSet(id.name, find_type, exact, constructor, local_symbols);
-                chain.lookup(symbols, pos);
-                
-                return symbols;        
-            }
-
-            // this, base symbols
-            if (s != null) {
-                symbols = new SymbolSet(s.name, find_type, true, constructor, local_symbols);
-                symbols.add(s);
-            // return an "empty" set
-            } else symbols = new SymbolSet("", false, false, false, false);
-            return symbols;
+            return resolve_non_compound(name, chain, pos, find_type, exact, constructor, local_symbols);
         }
 
         // The basename of a qualified name is always going to be an exact match, and never a
@@ -725,7 +775,7 @@ public class SourceFile : Node, Scope {
 
         // It doesn't make sense to be looking up members of a method as a qualified name
         if (scope is Method)
-            return new SymbolSet("", false, false, false, false);
+            return new SymbolSet.empty();
 
         SymbolSet symbols = new SymbolSet(compound.right, find_type, exact, constructor, local_symbols);
         if (scope != null)
