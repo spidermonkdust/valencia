@@ -173,10 +173,10 @@ class Scanner : Object {
             bool accept_all_chars_as_id = false;
             if (c == '@') {
                 accept_all_chars_as_id = true;
-                c = next_char();
                 // Don't include the '@' in ID's
                 token_start_char = input;
                 token_start = input_pos;
+                c = next_char();
             }
 
             // identifier start
@@ -190,9 +190,11 @@ class Scanner : Object {
                 // We don't use the foreach statement to iterate over the keywords array;
                 // that would copy the Keyword structure (and the string it contains) on
                 // each iteration, which would be slow.
-                for (int i = 0 ; i < keywords.length ; ++i)
-                    if (match(keywords[i].name))
-                        return keywords[i].token;
+                if (!accept_all_chars_as_id) {
+                    for (int i = 0 ; i < keywords.length ; ++i)
+                        if (match(keywords[i].name))
+                            return keywords[i].token;
+                }
                 return Token.ID;
             }
             switch (c) {

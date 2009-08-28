@@ -508,6 +508,29 @@ public class Parser : Object {
             if (n != null)
                 cl.members.add(n);
         }
+
+        // make sure the class has a constructor, if not, add a default one
+        if (container_type == Token.CLASS) {
+            bool found_constructor = false;
+            foreach (Node n in cl.members) {
+                Constructor c = n as Constructor;
+                if (c == null)
+                    continue;
+                    
+                if (c.name == null) {
+                    found_constructor = true;
+                    break;
+                }
+            }
+
+            if (!found_constructor) {
+                Constructor c = new Constructor(null, cl, source);
+                c.start = cl.start;
+                c.end = c.start;
+                c.update_prototype(cl.name + "()");
+                cl.members.add(c);
+            }
+        }
         
         cl.end = scanner.end;
         return cl;
