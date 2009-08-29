@@ -324,7 +324,11 @@ public class Parser : Object {
     }
 
     Symbol? parse_method_or_field(Class? enclosing_class) {
+        bool parse_delegate = false;
         weak string input = scanner.get_start_after_comments();
+        if (accept(Token.DELEGATE))
+            parse_delegate = true;
+        
         Expression type = parse_type();
         if (type == null) {
             skip();
@@ -354,7 +358,8 @@ public class Parser : Object {
                 f.end = scanner.end;
                 return f;
             case Token.LEFT_PAREN:
-                Method m = new Method(scanner.val(), type, source);
+                Method m = parse_delegate ? new Delegate(scanner.val(), type, source) 
+                                          : new Method(scanner.val(), type, source);
                 return parse_method(m, input);
             case Token.LEFT_BRACE:
                 Property p = new Property(type, scanner.val(), source, scanner.start, 0);
@@ -372,7 +377,6 @@ public class Parser : Object {
         switch (t) {
             case Token.ABSTRACT:
             case Token.CONST:
-            case Token.DELEGATE:
             case Token.EXTERN:
             case Token.INLINE:
             case Token.INTERNAL:

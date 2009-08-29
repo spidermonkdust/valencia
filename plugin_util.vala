@@ -114,7 +114,7 @@ class AutocompleteDialog : Object {
             
         } else {
             list_name = symbol.name;
-            if (symbol is Method)
+            if (symbol is Method && !(symbol is Delegate))
                 list_name = symbol.name + "()";
         }
         
@@ -480,13 +480,26 @@ class SymbolBrowser {
         return sf;
     }
 
+    Expression parse_entry() {
+        string text = find_entry.get_text().substring(0);
+        if (!text.contains("."))
+            return new Id(text);
+
+        string[] ids = text.split(".");
+        Expression e = new Id(ids[0]);
+        for (int i = 1; i < ids.length; ++i) {
+            e = new CompoundExpression(e, ids[i]);
+        }
+        return e;
+    }
+
     void update_symbols() {
         if (!parent.active_document_is_valid_vala_file()) {
             list.clear();
             return;
         }
     
-        Expression id = new Id(find_entry.get_text().substring(0));
+        Expression id = parse_entry();
         SourceFile sf = get_current_sourcefile();
         SymbolSet symbol_set = sf.resolve_all_locals(id, 0);
 

@@ -1404,18 +1404,23 @@ class Instance : Object {
         if (info.method != null)
             tip.show(info.method_info.method_name.to_string(), " " + info.method.to_string() + " ", 
                      info.method_info.method_start_position);  
-        else {
-            if (info.partial_name_at_cursor == null)
-                info.partial_name_at_cursor = new Id("");
-            
-            string? filename = active_filename();
-            Program program = Program.find_containing(filename);
-            SourceFile sf = program.find_source(filename);
-            
-            SymbolSet symbol_set = sf.resolve_prefix(info.partial_name_at_cursor, info.cursor_pos, 
-                                                     info.method_info.autocomplete_new);
-            autocomplete.show(symbol_set);
+                     
+        if (info.partial_name_at_cursor == null) {
+            if (info.method != null)
+                return;
+            info.partial_name_at_cursor = new Id("");
         }
+
+        if (info.partial_name_at_cursor == null)
+            info.partial_name_at_cursor = new Id("");
+
+        string? filename = active_filename();
+        Program program = Program.find_containing(filename);
+        SourceFile sf = program.find_source(filename);
+        
+        SymbolSet symbol_set = sf.resolve_prefix(info.partial_name_at_cursor, info.cursor_pos, 
+                                                 info.method_info.autocomplete_new);
+        autocomplete.show(symbol_set);
     }
 
     void display_tooltip() {

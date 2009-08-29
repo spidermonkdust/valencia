@@ -509,6 +509,12 @@ public class Method : Symbol, Scope {
     
 }
 
+public class Delegate : Method {
+    public Delegate(string? name, Expression return_type, SourceFile source) {
+        base(name, return_type, source);
+    }
+}
+
 public class Constructor : Method {
     public weak Class parent;
 
