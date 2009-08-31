@@ -402,12 +402,12 @@ class SymbolBrowser {
         find_entry = new Gtk.Entry();
         find_entry.activate += on_entry_activated;
         find_entry.changed += on_text_changed;
-        find_entry.focus_in_event += on_recieve_focus;
+        find_entry.focus_in_event += on_receive_focus;
 
         // A width of 175 pixels is a sane minimum; the user can always expand this to be bigger
         list = new ListViewString(Gtk.TreeViewColumnSizing.FIXED, 175);
         list.row_activated += on_list_activated;
-        list.recieved_focus += on_list_recieve_focus;
+        list.received_focus += on_list_receive_focus;
 
         symbol_vbox = new Gtk.VBox(false, 6);
         symbol_vbox.pack_start(find_entry, false, false, 0);
@@ -427,20 +427,20 @@ class SymbolBrowser {
 
     void on_panel_open(Gedit.Panel panel) {
         visible = true;
-        on_recieve_focus();
+        on_receive_focus();
     }
     
     void on_panel_hide() {
         visible = false;
     }
 
-    void on_list_recieve_focus(Gtk.TreePath? path) {
-        on_recieve_focus();
+    void on_list_receive_focus(Gtk.TreePath? path) {
+        on_receive_focus();
         if (path != null)
             list.select_path(path);
     }
 
-    bool on_recieve_focus() {
+    bool on_receive_focus() {
         if (parent.active_document_is_valid_vala_file()) {
             parent.reparse_modified_documents(parent.active_filename());
             on_update_symbols();

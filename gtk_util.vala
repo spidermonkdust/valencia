@@ -209,7 +209,7 @@ class ListViewString : Object {
     public Gtk.ScrolledWindow scrolled_window;
     
     public signal void row_activated();
-    public signal void recieved_focus(Gtk.TreePath? path);
+    public signal void received_focus(Gtk.TreePath? path);
 
     public ListViewString(Gtk.TreeViewColumnSizing sizing, int fixed_width) {
         list = new Gtk.ListStore(1, GLib.Type.from_name("gchararray"));
@@ -225,7 +225,7 @@ class ListViewString : Object {
         treeview = new Gtk.TreeView.with_model(list);
         treeview.append_column(column_view);
         treeview.headers_visible = false;
-        treeview.focus_in_event += on_recieved_focus;
+        treeview.focus_in_event += on_received_focus;
 
         scrolled_window = new Gtk.ScrolledWindow(null, null); 
         scrolled_window.hscrollbar_policy = Gtk.PolicyType.NEVER;
@@ -235,11 +235,11 @@ class ListViewString : Object {
         Signal.connect(treeview, "row-activated", (Callback) row_activated_callback, this);
     }
     
-    bool on_recieved_focus() {
+    bool on_received_focus() {
         Gtk.TreePath? path = get_path_at_cursor();
         if (path != null)
             path = select_first_cell();
-        recieved_focus(path);
+        received_focus(path);
         return false;
     }
     
