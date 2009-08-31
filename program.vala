@@ -1045,13 +1045,9 @@ public class ConfigurationFile : Object {
     }
     
     string[] split_for_argv(string? command, string default_command) {
-        string[] argv;
-        if (command != null)
-            argv = command.split(" ");
-        else {
-            argv = new string[1];
-            argv[0] = default_command;
-        }
+        if (command == null)
+            command = default_command;
+        string[] argv = command.split(" ");
         argv += null;
         return argv;
     }
