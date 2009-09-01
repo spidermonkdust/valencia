@@ -8,87 +8,6 @@ using Gee;
 using Vte;
 using Valencia;
 
-void make_pipe(int fd, IOFunc func) throws IOChannelError {
-    IOChannel pipe = new IOChannel.unix_new(fd);
-    pipe.set_flags(IOFlags.NONBLOCK);
-    pipe.add_watch(IOCondition.IN | IOCondition.HUP, func);
-}
-
-Gtk.TextIter get_insert_iter(Gtk.TextBuffer buffer) {
-    Gtk.TextIter iter;
-    buffer.get_iter_at_mark(out iter, buffer.get_insert());
-    return iter;
-}
-
-void get_line_start_end(Gtk.TextIter iter, out Gtk.TextIter start, out Gtk.TextIter end) {
-    start = iter;
-    start.set_line_offset(0);
-    end = iter;
-    end.forward_line();
-}
-
-void append_with_tag(Gtk.TextBuffer buffer, string text, Gtk.TextTag? tag) {
-    Gtk.TextIter end;
-    buffer.get_end_iter(out end);
-    if (tag != null)
-        buffer.insert_with_tags(end, text, -1, tag);
-    else
-        buffer.insert(end, text, -1);
-}
-
-void append(Gtk.TextBuffer buffer, string text) {
-    append_with_tag(buffer, text, null);
-}
-
-Gtk.TextIter iter_at_line_offset(Gtk.TextBuffer buffer, int line, int offset) {
-    // We must be careful: TextBuffer.get_iter_at_line_offset() will crash if we give it an
-    // offset greater than the length of the line.
-    Gtk.TextIter iter;
-    buffer.get_iter_at_line(out iter, line);
-    int len = iter.get_chars_in_line() - 1;     // subtract 1 for \n
-    if (len < 0)    // no \n was present, e.g. in an empty file
-        len = 0;
-    int end = int.min(len, offset);
-    Gtk.TextIter ret;
-    buffer.get_iter_at_line_offset(out ret, line, end);
-    return ret;
-}
-
-weak string buffer_contents(Gtk.TextBuffer buffer) {
-    Gtk.TextIter start;
-    Gtk.TextIter end;
-    buffer.get_bounds(out start, out end);
-    return buffer.get_text(start, end, true);
-}
-
-string? filename_to_uri(string filename) {
-    try {
-        return Filename.to_uri(filename);
-    } catch (ConvertError e) { return null; }
-}
-
-string? document_filename(Gedit.Document document) {
-    string uri = document.get_uri();
-    if (uri == null)
-        return null;
-    try {
-        return Filename.from_uri(uri);
-    } catch (ConvertError e) { return null; }
-}
-
-Gedit.Tab? find_tab(string filename, out Gedit.Window window) {
-    string uri = filename_to_uri(filename);
-    
-    foreach (Gedit.Window w in Gedit.App.get_default().get_windows()) {
-        Gedit.Tab tab = w.get_tab_from_uri(uri);
-        if (tab != null) {
-            window = w;
-            return tab;
-        }
-    }
-    return null;
-}
-
 abstract class Destination : Object {
     public abstract void get_range(Gtk.TextBuffer buffer,
                                    out Gtk.TextIter start, out Gtk.TextIter end);
@@ -159,9 +78,7 @@ class ScanInfo : Object {
         cursor_pos = cursor_position;
     }
     
-    public ScanInfo.empty() {
-        
-    }
+    public ScanInfo.empty() { }
 }
 
 class Instance : Object {
@@ -372,69 +289,55 @@ class Instance : Object {
         
         ui_id = manager.add_ui_from_string(ui, -1);
         
-        Gtk.MenuItem search_menu = (Gtk.MenuItem) manager.get_widget("/MenuBar/SearchMenu");
-        if (search_menu != null)
-            search_menu.activate += on_search_menu_activated;
-        else critical("null search_menu");
-        
-        Gtk.MenuItem project_menu = (Gtk.MenuItem) manager.get_widget(
-            "/MenuBar/ExtraMenu_1/ProjectMenu");
-        if (project_menu != null)
-            project_menu.activate += on_project_menu_activated;
-        else critical("null project_menu");
-        
-        go_to_definition_menu_item = (Gtk.MenuItem) manager.get_widget(
-            "/MenuBar/SearchMenu/SearchOps_8/SearchGoToDefinitionMenu");
-        assert(go_to_definition_menu_item != null);
-        
-        find_symbol_menu_item = (Gtk.MenuItem) manager.get_widget(
-            "/MenuBar/SearchMenu/SearchOps_8/SearchFindSymbolMenu");
-        assert(find_symbol_menu_item != null);
-        
-        go_to_outer_scope_menu_item = (Gtk.MenuItem) manager.get_widget(
-            "/MenuBar/SearchMenu/SearchOps_8/SearchGoToEnclosingMethodMenu");
-        assert(go_to_outer_scope_menu_item != null);
-        
-        go_back_menu_item = (Gtk.MenuItem) manager.get_widget(
-            "/MenuBar/SearchMenu/SearchOps_8/SearchGoBackMenu");
-        assert(go_back_menu_item != null);
-        
-        go_forward_menu_item = (Gtk.MenuItem) manager.get_widget(
-            "/MenuBar/SearchMenu/SearchOps_8/SearchGoForwardMenu");
-        assert(go_forward_menu_item != null);
-
-        next_error_menu_item = (Gtk.MenuItem) manager.get_widget(
-            "/MenuBar/SearchMenu/SearchOps_8/SearchNextErrorMenu");
-        assert(next_error_menu_item != null);
-        
-        prev_error_menu_item = (Gtk.MenuItem) manager.get_widget(
-            "/MenuBar/SearchMenu/SearchOps_8/SearchPrevErrorMenu");
-        assert(prev_error_menu_item != null);
-        
-        display_tooltip_menu_item = (Gtk.MenuItem) manager.get_widget(
-            "/MenuBar/SearchMenu/SearchOps_8/SearchAutocompleteMenu");
-        assert(display_tooltip_menu_item != null);
-        
-        build_menu_item = (Gtk.MenuItem) manager.get_widget(
-            "/MenuBar/ExtraMenu_1/ProjectMenu/ProjectBuildMenu");
-        assert(build_menu_item != null);
-        
-        clean_menu_item = (Gtk.MenuItem) manager.get_widget(
-            "/MenuBar/ExtraMenu_1/ProjectMenu/ProjectCleanMenu");
-        assert(build_menu_item != null);
-        
-        run_menu_item = (Gtk.MenuItem) manager.get_widget(
-            "/MenuBar/ExtraMenu_1/ProjectMenu/ProjectRunMenu");
-        assert(run_menu_item != null);
-
-        settings_menu_item = (Gtk.MenuItem) manager.get_widget(
-              "/MenuBar/ExtraMenu_1/ProjectMenu/ProjectSettingsMenu");
-        assert(run_menu_item != null);
-
+        initialize_menu_items(manager);
         init_error_regex();
 
         instance_connections.add_signal(window, "tab-added", (Callback) tab_added_callback, this);
         instance_connections.add_signal(window, "tab-removed", (Callback) tab_removed_callback, this);
+    }
+
+    void initialize_menu_items(Gtk.UIManager manager) {
+        Gtk.MenuItem search_menu = get_menu_item(manager, "/MenuBar/SearchMenu");
+        search_menu.activate += on_search_menu_activated;
+        
+        Gtk.MenuItem project_menu = get_menu_item(manager, "/MenuBar/ExtraMenu_1/ProjectMenu");
+        project_menu.activate += on_project_menu_activated;
+        
+        go_to_definition_menu_item = get_menu_item(manager,
+            "/MenuBar/SearchMenu/SearchOps_8/SearchGoToDefinitionMenu");
+        
+        find_symbol_menu_item = get_menu_item(manager,
+            "/MenuBar/SearchMenu/SearchOps_8/SearchFindSymbolMenu");
+        
+        go_to_outer_scope_menu_item = get_menu_item(manager,
+            "/MenuBar/SearchMenu/SearchOps_8/SearchGoToEnclosingMethodMenu");
+        
+        go_back_menu_item = get_menu_item(manager,
+            "/MenuBar/SearchMenu/SearchOps_8/SearchGoBackMenu");
+        
+        go_forward_menu_item = get_menu_item(manager, 
+            "/MenuBar/SearchMenu/SearchOps_8/SearchGoForwardMenu");
+
+        next_error_menu_item = get_menu_item(manager, 
+            "/MenuBar/SearchMenu/SearchOps_8/SearchNextErrorMenu");
+        
+        prev_error_menu_item = get_menu_item(manager,
+            "/MenuBar/SearchMenu/SearchOps_8/SearchPrevErrorMenu");
+        
+        display_tooltip_menu_item = get_menu_item(manager,
+            "/MenuBar/SearchMenu/SearchOps_8/SearchAutocompleteMenu");
+        
+        build_menu_item = get_menu_item(manager,
+            "/MenuBar/ExtraMenu_1/ProjectMenu/ProjectBuildMenu");
+        
+        clean_menu_item = get_menu_item(manager,
+            "/MenuBar/ExtraMenu_1/ProjectMenu/ProjectCleanMenu");
+        
+        run_menu_item = get_menu_item(manager,
+            "/MenuBar/ExtraMenu_1/ProjectMenu/ProjectRunMenu");
+
+        settings_menu_item = get_menu_item(manager, 
+              "/MenuBar/ExtraMenu_1/ProjectMenu/ProjectSettingsMenu");
     }
 
     static void tab_added_callback(Gedit.Window window, Gedit.Tab tab, Instance instance) {
@@ -572,7 +475,6 @@ class Instance : Object {
                 instance.autocomplete.hide();
             else
                 instance.display_autocomplete();
-
         }
 
         if (instance.tip.is_visible()) {
