@@ -10,6 +10,59 @@ using Gee;
 //                    Helper functions                    //
 ////////////////////////////////////////////////////////////
 
+Gtk.TextIter get_insert_iter(Gtk.TextBuffer buffer) {
+    Gtk.TextIter iter;
+    buffer.get_iter_at_mark(out iter, buffer.get_insert());
+    return iter;
+}
+
+void get_line_start_end(Gtk.TextIter iter, out Gtk.TextIter start, out Gtk.TextIter end) {
+    start = iter;
+    start.set_line_offset(0);
+    end = iter;
+    end.forward_line();
+}
+
+void append_with_tag(Gtk.TextBuffer buffer, string text, Gtk.TextTag? tag) {
+    Gtk.TextIter end;
+    buffer.get_end_iter(out end);
+    if (tag != null)
+        buffer.insert_with_tags(end, text, -1, tag);
+    else
+        buffer.insert(end, text, -1);
+}
+
+void append(Gtk.TextBuffer buffer, string text) {
+    append_with_tag(buffer, text, null);
+}
+
+Gtk.TextIter iter_at_line_offset(Gtk.TextBuffer buffer, int line, int offset) {
+    // We must be careful: TextBuffer.get_iter_at_line_offset() will crash if we give it an
+    // offset greater than the length of the line.
+    Gtk.TextIter iter;
+    buffer.get_iter_at_line(out iter, line);
+    int len = iter.get_chars_in_line() - 1;     // subtract 1 for \n
+    if (len < 0)    // no \n was present, e.g. in an empty file
+        len = 0;
+    int end = int.min(len, offset);
+    Gtk.TextIter ret;
+    buffer.get_iter_at_line_offset(out ret, line, end);
+    return ret;
+}
+
+weak string buffer_contents(Gtk.TextBuffer buffer) {
+    Gtk.TextIter start;
+    Gtk.TextIter end;
+    buffer.get_bounds(out start, out end);
+    return buffer.get_text(start, end, true);
+}
+
+Gtk.MenuItem get_menu_item(Gtk.UIManager manager, string path) {
+    Gtk.MenuItem item = (Gtk.MenuItem) manager.get_widget(path);
+    assert(item != null);
+    return item;
+}
+
 public void show_error_dialog(string message) {
     Gtk.MessageDialog err_dialog = new Gtk.MessageDialog(null, Gtk.DialogFlags.MODAL, 
                                                 Gtk.MessageType.ERROR, Gtk.ButtonsType.OK, 

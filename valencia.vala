@@ -87,6 +87,7 @@ class Instance : Object {
     Program last_program_to_build;
 
     Gtk.ActionGroup action_group;
+    
     Gtk.MenuItem go_to_definition_menu_item;
     Gtk.MenuItem find_symbol_menu_item;
     Gtk.MenuItem go_to_outer_scope_menu_item;
@@ -95,6 +96,7 @@ class Instance : Object {
     Gtk.MenuItem next_error_menu_item;
     Gtk.MenuItem prev_error_menu_item;
     Gtk.MenuItem display_tooltip_menu_item;
+    
     Gtk.MenuItem build_menu_item;
     Gtk.MenuItem clean_menu_item;
     Gtk.MenuItem run_menu_item;
@@ -1526,7 +1528,6 @@ void on_clean() {
         Gedit.Panel panel = window.get_bottom_panel();
         panel.remove_item(output_pane);
     }
-
 }
 
 class Plugin : Gedit.Plugin {
