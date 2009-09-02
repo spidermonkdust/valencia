@@ -3,8 +3,8 @@ VERSION = 0.2.1
 
 VALAC = valac
 
-SOURCES = autocomplete.vala gtk_util.vala parser.vala program.vala scanner.vala \
-          settings.vala symbol_browser.vala util.vala valencia.vala
+SOURCES = autocomplete.vala browser.vala gtk_util.vala parser.vala program.vala scanner.vala \
+          settings.vala util.vala valencia.vala
 LIBS = --pkg vala-1.0 --pkg gedit-2.20 --pkg vte
 
 DIST_FILES = $(SOURCES) \
