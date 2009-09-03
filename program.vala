@@ -25,14 +25,22 @@ public class Id : Expression {
 }
 
 public class This : Expression {
-    public override string to_string() {
-        return "this";
-    }    
+    public override string to_string() { return "this"; }    
 }
 
 public class Base : Expression {
+    public override string to_string() { return "base"; }
+}
+
+public class New : Expression {
+    public Expression class_name;
+    
+    public New(Expression class_name) {
+        this.class_name = class_name;
+    }
+    
     public override string to_string() {
-        return "base";
+        return "new " + class_name.to_string();
     }
 }
 
@@ -729,6 +737,7 @@ public class SourceFile : Node, Scope {
                                           bool exact, bool constructor, bool local_symbols) {
         Symbol s;
         SymbolSet symbols;
+        
         if (name is This) {
             s = chain.lookup_this();
         } else if (name is Base) {
@@ -738,25 +747,32 @@ public class SourceFile : Node, Scope {
             MethodCall method_call = (MethodCall) name;
             symbols = resolve1(method_call.method, chain, pos, false, exact, false, local_symbols);
             s = symbols.first();
-            Method m = s as Method;
             
-            // Then find the return type symbol of the method
-            if (m != null)
-                return resolve1(m.return_type, find(null, m.start), m.start, true, exact, false, local_symbols);
-            else return new SymbolSet.empty();
-        } else { // name is Id
+            Constructor c = s as Constructor;
+            if (c != null)
+                s = c.parent;
+            else {
+                Method m = s as Method;
+                if (m != null)
+                    // find the return type symbol of the method
+                    return resolve1(m.return_type, find(null, m.start), m.start, true, exact, false, local_symbols);
+                return new SymbolSet.empty();
+            }
+        } else if (name is Id) {
             Id id = (Id) name;
             symbols = new SymbolSet(id.name, find_type, exact, constructor, local_symbols);
             chain.lookup(symbols, pos);
             return symbols;        
+        } else {    // name is New
+            New n = (New) name;
+            return resolve1(n.class_name, chain, pos, find_type, exact, true, local_symbols);
         }
 
-        // this, base symbols
         if (s != null) {
             symbols = new SymbolSet(s.name, find_type, true, constructor, local_symbols);
             symbols.add(s);
-        // return an "empty" set
-        } else symbols = new SymbolSet.empty();
+        } else symbols = new SymbolSet.empty();  // return an "empty" set
+        
         return symbols;
     }
 

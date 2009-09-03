@@ -295,10 +295,6 @@ class Scanner : Object {
         return start_char.ndup(bytes);
     }
 
-    public string val_from_start_to_offset(int offset) {
-        return start_char.substring(0, offset);        
-    }
-
     public weak string get_start() {
         return start_char;
     }

@@ -63,22 +63,21 @@ class CharRange : Destination {
 }
 
 class ScanInfo : Object {
+    public ParseInfo parse_info;
     public Method? method;
-    public Expression? partial_name_at_cursor;
-    public Expression? name_at_cursor;
-    public MethodScanInfo method_info;
     public int cursor_pos;
     
-    public ScanInfo(Method? method, Expression? name_at_cursor, Expression? partial_name_at_cursor,
-                    MethodScanInfo method_info, int cursor_position) {
+    public ScanInfo(Method? method, ParseInfo parse_info, int cursor_position) {
         this.method = method;
-        this.name_at_cursor = name_at_cursor;
-        this.partial_name_at_cursor = partial_name_at_cursor;
-        this.method_info = method_info;
+        this.parse_info = parse_info;
         cursor_pos = cursor_position;
     }
     
     public ScanInfo.empty() { }
+    
+    public Expression inner() { return parse_info.inner; }
+    
+    public Expression outer() { return parse_info.outer; }
 }
 
 class Instance : Object {
@@ -476,16 +475,16 @@ class Instance : Object {
             if (text.get_char().isspace())
                 instance.autocomplete.hide();
             else
-                instance.display_autocomplete();
+                instance.display_autocomplete(instance.get_scan_info());
         }
 
         if (instance.tip.is_visible()) {
             if (text == ")" || text == "(") {
                 instance.tip.hide();
                 instance.autocomplete.hide();
-                instance.display_tooltip();
+                instance.display_tooltip(instance.get_scan_info());
             } 
-        } 
+        }
     }
 
     static void text_deleted_callback(Gedit.Document doc, Gtk.TextIter start, Gtk.TextIter end,
@@ -895,12 +894,12 @@ class Instance : Object {
         get_buffer_str_and_pos(filename, out source, out pos);
 
         ScanInfo info = get_scan_info();
-        if (info == null || info.name_at_cursor == null)
+        if (info == null || info.inner() == null)
             return;
 
         Program program = Program.find_containing(filename);
         SourceFile sf = program.find_source(filename);
-        Symbol? sym = sf.resolve(info.name_at_cursor, pos, info.method_info.autocomplete_new);
+        Symbol? sym = sf.resolve(info.inner(), pos, false);
         if (sym == null)
             return;
 
@@ -1300,74 +1299,51 @@ class Instance : Object {
         } else display_tooltip_or_autocomplete();
     }
 
-    void display_tooltip_or_autocomplete() {
-        ScanInfo info = get_scan_info();
-        if (info == null)
-            return;
-
-        if (info.method != null)
-            tip.show(info.method_info.method_name.to_string(), " " + info.method.to_string() + " ", 
-                     info.method_info.method_start_position);  
-                     
-        if (info.partial_name_at_cursor == null) {
-            if (info.method != null)
-                return;
-            info.partial_name_at_cursor = new Id("");
-        }
-
-        if (info.partial_name_at_cursor == null)
-            info.partial_name_at_cursor = new Id("");
-
-        string? filename = active_filename();
-        Program program = Program.find_containing(filename);
-        SourceFile sf = program.find_source(filename);
-        
-        SymbolSet symbol_set = sf.resolve_prefix(info.partial_name_at_cursor, info.cursor_pos, 
-                                                 info.method_info.autocomplete_new);
-        autocomplete.show(symbol_set);
-    }
-
-    void display_tooltip() {
-        ScanInfo info = get_scan_info();
+    void display_tooltip(ScanInfo info) {
         if (info == null)
             return;
     
         if (info.method != null)
-            tip.show(info.method_info.method_name.to_string(), " " + info.method.to_string() + " ", 
-                     info.method_info.method_start_position);  
+            tip.show(info.outer().to_string(), " " + info.method.to_string() + " ", 
+                     info.parse_info.outer_pos);
     }
 
-    void display_autocomplete() {
-        ScanInfo info = get_scan_info();
+    void display_autocomplete(ScanInfo info) {
         if (info == null)
             return;
 
-        if (info.partial_name_at_cursor == null)
-            info.partial_name_at_cursor = new Id("");
+        Expression e = info.inner();
+        
+        if (e == null) {
+            if (info.method != null)
+                return;
+            e = new Id("");
+        }
 
         string? filename = active_filename();
         Program program = Program.find_containing(filename);
         SourceFile sf = program.find_source(filename);
 
-        SymbolSet symbol_set = sf.resolve_prefix(info.partial_name_at_cursor, info.cursor_pos, 
-                                                 info.method_info.autocomplete_new);
-
+        SymbolSet symbol_set = sf.resolve_prefix(e, info.cursor_pos, false);
         autocomplete.show(symbol_set);
+    }
+
+    void display_tooltip_or_autocomplete() {
+        ScanInfo info = get_scan_info();
+        display_tooltip(info);
+        display_autocomplete(info);
     }
 
     ScanInfo? get_scan_info() {
         Method? method;
-        Expression? partial_name_at_cursor;
-        Expression? name_at_cursor;
-        MethodScanInfo method_info;
+        ParseInfo parse_info;
         int cursor_pos;
     
         string? filename = active_filename();
         weak string source;
         get_buffer_str_and_pos(filename, out source, out cursor_pos); 
 
-        method_info = new Parser().method_at(source, cursor_pos, out partial_name_at_cursor, 
-                                             out name_at_cursor);
+        parse_info = new Parser().method_at(source, cursor_pos);
 
         Program program = Program.find_containing(filename);
         SourceFile sf = program.find_source(filename);
@@ -1377,14 +1353,14 @@ class Instance : Object {
 
         // Give the method tooltip precedence over autocomplete
         method = null;
-        if (method_info.method_name != null && 
-            (!tip.is_visible() || cursor_is_inside_different_function(method_info.method_start_position))) {
-            Symbol? sym = sf.resolve(method_info.method_name, cursor_pos, method_info.tooltip_new);
+        if (parse_info.outer != null && 
+            (!tip.is_visible() || cursor_is_inside_different_function(parse_info.outer_pos))) {
+            Symbol? sym = sf.resolve(parse_info.outer, cursor_pos, false);
             if (sym != null)
                 method = sym as Method; 
         }
 
-        return new ScanInfo(method, name_at_cursor, partial_name_at_cursor, method_info, cursor_pos);
+        return new ScanInfo(method, parse_info, cursor_pos);
     }
 
     bool cursor_is_inside_different_function(int method_pos) {
