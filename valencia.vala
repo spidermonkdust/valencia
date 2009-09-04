@@ -475,14 +475,14 @@ class Instance : Object {
             if (text.get_char().isspace())
                 instance.autocomplete.hide();
             else
-                instance.display_autocomplete(instance.get_scan_info());
+                instance.display_autocomplete(instance.get_scan_info(true));
         }
 
         if (instance.tip.is_visible()) {
             if (text == ")" || text == "(") {
                 instance.tip.hide();
                 instance.autocomplete.hide();
-                instance.display_tooltip(instance.get_scan_info());
+                instance.display_tooltip(instance.get_scan_info(true));
             } 
         }
     }
@@ -893,7 +893,7 @@ class Instance : Object {
         int pos;
         get_buffer_str_and_pos(filename, out source, out pos);
 
-        ScanInfo info = get_scan_info();
+        ScanInfo info = get_scan_info(false);
         if (info == null || info.inner() == null)
             return;
 
@@ -1329,12 +1329,12 @@ class Instance : Object {
     }
 
     void display_tooltip_or_autocomplete() {
-        ScanInfo info = get_scan_info();
+        ScanInfo info = get_scan_info(true);
         display_tooltip(info);
         display_autocomplete(info);
     }
 
-    ScanInfo? get_scan_info() {
+    ScanInfo? get_scan_info(bool partial) {
         Method? method;
         ParseInfo parse_info;
         int cursor_pos;
@@ -1343,7 +1343,7 @@ class Instance : Object {
         weak string source;
         get_buffer_str_and_pos(filename, out source, out cursor_pos); 
 
-        parse_info = new ExpressionParser().parse(source, cursor_pos);
+        parse_info = new ExpressionParser(source, cursor_pos, partial).parse();
 
         Program program = Program.find_containing(filename);
         SourceFile sf = program.find_source(filename);
