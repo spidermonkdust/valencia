@@ -455,6 +455,13 @@ public class Method : Symbol, Scope {
     
 }
 
+// We use the name "VSignal" to avoid a name conflict with GLib.Signal.
+public class VSignal : Method {
+    public VSignal(string? name, Expression return_type, SourceFile source) {
+        base(name, return_type, source);
+    }
+}
+
 public class Delegate : Method {
     public Delegate(string? name, Expression return_type, SourceFile source) {
         base(name, return_type, source);

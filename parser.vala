@@ -308,9 +308,11 @@ public class Parser : Object {
     }
 
     Symbol? parse_method_or_field(Class? enclosing_class) {
-        bool parse_delegate = false;
+        bool parse_signal = false, parse_delegate = false;
         weak string input = scanner.get_start_after_comments();
-        if (accept(Token.DELEGATE))
+        if (accept(Token.SIGNAL))
+            parse_signal = true;
+        else if (accept(Token.DELEGATE))
             parse_delegate = true;
         
         Expression type = parse_type();
@@ -342,8 +344,12 @@ public class Parser : Object {
                 f.end = scanner.end;
                 return f;
             case Token.LEFT_PAREN:
-                Method m = parse_delegate ? new Delegate(scanner.val(), type, source) 
-                                          : new Method(scanner.val(), type, source);
+                Method m;
+                if (parse_signal)
+                    m = new VSignal(scanner.val(), type, source);
+                else if (parse_delegate)
+                    m = new Delegate(scanner.val(), type, source);
+                else m = new Method(scanner.val(), type, source);
                 return parse_method(m, input);
             case Token.LEFT_BRACE:
                 Property p = new Property(type, scanner.val(), source, scanner.start, 0);
@@ -369,7 +375,6 @@ public class Parser : Object {
             case Token.PRIVATE:
             case Token.PROTECTED:
             case Token.PUBLIC:
-            case Token.SIGNAL:
             case Token.STATIC:
             case Token.VIRTUAL:
                 return true;

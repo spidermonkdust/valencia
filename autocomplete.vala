@@ -114,7 +114,7 @@ class AutocompleteDialog : Object {
             
         } else {
             list_name = symbol.name;
-            if (symbol is Method && !(symbol is Delegate))
+            if (symbol is Method && !(symbol is VSignal) && !(symbol is Delegate))
                 list_name = symbol.name + "()";
         }
         
