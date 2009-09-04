@@ -1343,7 +1343,7 @@ class Instance : Object {
         weak string source;
         get_buffer_str_and_pos(filename, out source, out cursor_pos); 
 
-        parse_info = new Parser().method_at(source, cursor_pos);
+        parse_info = new ExpressionParser().parse(source, cursor_pos);
 
         Program program = Program.find_containing(filename);
         SourceFile sf = program.find_source(filename);

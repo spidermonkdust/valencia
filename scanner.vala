@@ -286,6 +286,14 @@ class Scanner : Object {
         end = input_pos;
         return t;
     }
+    
+    public bool accept_token(Token t) {
+        if (peek_token() == t) {
+            next_token();
+            return true;
+        }
+        return false;
+    }
 
     public bool eof() { return peek_token() == Token.EOF; }
 

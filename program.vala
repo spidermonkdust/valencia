@@ -8,68 +8,6 @@ using Gee;
 
 namespace Valencia {
 
-public abstract class Expression : Object {
-    public abstract string to_string();
-}
-
-public class Id : Expression {
-    public string name;
-    
-    public Id(string name) { 
-        this.name = name;
-    }
-    
-    public override string to_string() {
-        return name;
-    }
-}
-
-public class This : Expression {
-    public override string to_string() { return "this"; }    
-}
-
-public class Base : Expression {
-    public override string to_string() { return "base"; }
-}
-
-public class New : Expression {
-    public Expression class_name;
-    
-    public New(Expression class_name) {
-        this.class_name = class_name;
-    }
-    
-    public override string to_string() {
-        return "new " + class_name.to_string();
-    }
-}
-
-public class MethodCall : Expression {
-    public Expression method;
-    
-    public MethodCall(Expression method) {
-        this.method = method;
-    }
-    
-    public override string to_string() {
-        return method.to_string() + "()";
-    }
-}
-
-public class CompoundExpression : Expression {
-    public Expression left;
-    public string right;
-    
-    public CompoundExpression(Expression left, string right) {
-        this.left = left;
-        this.right = right;
-    }
-    
-    public override string to_string() {
-        return left.to_string() + "." + right;
-    }
-}
-
 public class SymbolSet : Object {
     HashSet<Symbol> symbols = new HashSet<Symbol>();
     string name;

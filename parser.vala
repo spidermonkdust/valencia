@@ -38,13 +38,7 @@ public class Parser : Object {
     Token peek_token() { return scanner.peek_token(); }
     Token next_token() { return scanner.next_token(); }
     
-    bool accept(Token t) {
-        if (peek_token() == t) {
-            next_token();
-            return true;
-        }
-        return false;
-    }
+    bool accept(Token t) { return scanner.accept_token(t); }
     
     // Skip to a right brace or semicolon.
     void skip() {
@@ -612,80 +606,6 @@ public class Parser : Object {
          source.top.end = scanner.end;
     }
 
-    ParseInfo parse_expr(Scanner scanner, int pos, bool nested) {
-        int parens = 0;
-        
-        while (true) {
-            Token t = scanner.next_token();
-            if (t == Token.EOF || scanner.start > pos)
-                break;
-                
-            bool is_new;
-            if (t == Token.NEW) {
-                is_new = true;
-                t = scanner.next_token();
-                if (scanner.start > pos)
-                    break;
-            } else is_new = false;
-            
-            if (t == Token.ID || (t == Token.THIS || t == Token.BASE) && !is_new) {
-                Expression e = null;
-                if (t == Token.ID)
-                    e = new Id(scanner.val());
-                else if (t == Token.THIS)
-                    e = new This();
-                else if (t == Token.BASE)
-                    e = new Base();
-                    
-                while (true) {
-                    if (scanner.end >= pos)
-                        return new ParseInfo(is_new ? new New(e) : e);
-                    if (accept(Token.LEFT_PAREN)) {
-                        if (is_new) {
-                            e = new New(e);
-                            is_new = false;
-                        }
-                        int paren_pos = scanner.start;
-                        ParseInfo info = parse_expr(scanner, pos, true);
-                        if (scanner.end > pos || info.inner != null || info.outer != null) {
-                            if (info.outer == null) {
-                                info.outer = e;
-                                info.outer_pos = paren_pos;
-                            }
-                            return info;
-                        }
-                        e = new MethodCall(e);
-                    }
-                    if (!accept(Token.PERIOD))
-                        break;
-                    bool period = (scanner.end == pos);
-                    if (accept(Token.ID) && scanner.start <= pos)
-                        e = new CompoundExpression(e, scanner.val());
-                    else if (period)
-                        e = new CompoundExpression(e, "");
-                    else break;
-                }
-            }
-            
-            if (nested) {
-                if (t == Token.LEFT_PAREN) {
-                    ++parens;
-                    continue;
-                }
-                if (t == Token.RIGHT_PAREN && --parens < 0)
-                    break;
-            }
-        }
-        
-        return new ParseInfo(null);
-    }
-
-    public ParseInfo method_at(string input, int pos) {
-        scanner = new Scanner(input);
-        ParseInfo info = parse_expr(scanner, pos, false);
-        return info;
-    }
-    
     // namespaces, interfaces/classes/structs/enums, and methods count as enclosing scopes
     public ScanScope? find_enclosing_scope(string input, int pos, bool classes_only) {
         scanner = new Scanner(input);
