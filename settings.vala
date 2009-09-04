@@ -71,12 +71,7 @@ class ProjectSettingsDialog : Object {
         Program program = Program.find_containing(active_filename);
             
         build_command = program.config_file.get_build_command();
-        if (build_command == null)
-            build_command = ConfigurationFile.default_build_command;
-
         clean_command = program.config_file.get_clean_command();
-        if (clean_command == null)
-            clean_command = ConfigurationFile.default_clean_command;
     }
 
     public void show(string active_filename) {
@@ -108,13 +103,13 @@ class ProjectSettingsDialog : Object {
 
         bool changed = false;
         if (new_build_command != build_command && new_build_command != "") {
-                build_command = new_build_command;
-                changed = true;
+            build_command = new_build_command;
+            changed = true;
         }
 
         if (new_clean_command != clean_command && new_clean_command != "") {
-                clean_command = new_clean_command;
-                changed = true;
+            clean_command = new_clean_command;
+            changed = true;
         }        
        
         if (changed)

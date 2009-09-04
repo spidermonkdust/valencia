@@ -925,22 +925,6 @@ public class ConfigurationFile : Object {
         return Path.build_filename(parent_program.get_top_directory(), ".valencia");
     }
 
-/*    MatchValue match(string keyword, string master_keyword, string val, ref string master_val, 
-                     bool matched) {
-        if (keyword == master_keyword) {
-            if (!matched) {
-                if (val != null) {
-                    master_val = val;
-                    return MatchValue.MATCHED;
-                } else {
-                    warning("Incorrect file format, ignoring...\n");
-                    return MatchValue.ERROR;
-                }
-            }
-        }
-        return MatchValue.UNMATCHED;
-    }*/
-
     void load() {
         string file_path = get_file_path();
 
@@ -1005,35 +989,20 @@ public class ConfigurationFile : Object {
         }
     }
     
-    string[] split_for_argv(string? command, string default_command) {
-        if (command == null)
-            command = default_command;
-        string[] argv = command.split(" ");
-        argv += null;
-        return argv;
-    }
-
     public string? get_build_command() {
         if (build_command == null)
             load();
             
-        return build_command;
+        return build_command == null ? default_build_command : build_command;
     }
 
     public string? get_clean_command() {
         if (clean_command == null)
             load();
-        return clean_command;
+            
+        return clean_command == null ? default_clean_command : clean_command;
     }
     
-    public string[] get_build_args() {
-        return split_for_argv(get_build_command(), default_build_command);
-    }
-    
-    public string[] get_clean_args() {
-        return split_for_argv(get_clean_command(), default_clean_command);
-    }
-
     public void update(string new_build_command, string new_clean_command) {
         build_command = new_build_command;
         clean_command = new_clean_command;

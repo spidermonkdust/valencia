@@ -594,7 +594,13 @@ class Instance : Object {
         panel.show();
     }
     
-    void spawn_process(string[] argv, string working_directory, ProcessFinished callback) {
+    void spawn_process(string command, string working_directory, ProcessFinished callback) {
+        string[] argv;
+        if (!Shell.parse_argv(command, out argv)) {
+            warning("can't parse command arguments");
+            return;
+        }
+        
         on_process_finshed = callback;
         output_buffer.set_text("", 0);
         
@@ -638,11 +644,8 @@ class Instance : Object {
         }
 
         append_with_tag(output_buffer, "Running ", italic_tag);
-        foreach (string arg in argv) {
-            if (arg != null)
-                append_with_tag(output_buffer, arg + " ", bold_tag);
-        }
-        append_with_tag(output_buffer, "in ", italic_tag);
+        append_with_tag(output_buffer, command, bold_tag);
+        append_with_tag(output_buffer, " in ", italic_tag);
         append_with_tag(output_buffer, working_directory, bold_tag);
         append(output_buffer, "\n\n");
     }
@@ -661,9 +664,9 @@ class Instance : Object {
 
         hide_old_build_output();
 
-        string[] argv = last_program_to_build.config_file.get_build_args();
+        string command = last_program_to_build.config_file.get_build_command();
 
-        spawn_process(argv, last_program_to_build.get_top_directory(), on_build_finished);
+        spawn_process(command, last_program_to_build.get_top_directory(), on_build_finished);
     }
 
     void on_saved() {
@@ -1440,9 +1443,8 @@ void on_clean() {
     Program program = Program.find_containing(filename);
 
     string working_directory = program.get_top_directory();
-    string[] argv = program.config_file.get_clean_args();
-    
-    spawn_process(argv, working_directory, on_clean_finished);
+    string command = program.config_file.get_clean_command();
+    spawn_process(command, working_directory, on_clean_finished);
 }
 
 ////////////////////////////////////////////////////////////
