@@ -24,7 +24,7 @@ install:
 	mkdir -p ~/.gnome2/gedit/plugins
 	cp libvalencia.so valencia.gedit-plugin ~/.gnome2/gedit/plugins
 
-parser: parser.vala program.vala scanner.vala util.vala
+parser:  expression.vala parser.vala program.vala scanner.vala util.vala
 	$(VALAC) $(VFLAGS) --pkg vala-1.0 --pkg gtk+-2.0 $^ -o $@
 
 $(DIST_TAR_BZ2): $(DIST_FILES)

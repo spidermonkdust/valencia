@@ -79,27 +79,3 @@ void make_pipe(int fd, IOFunc func) throws IOChannelError {
     pipe.add_watch(IOCondition.IN | IOCondition.HUP, func);
 }
 
-//// Gedit helper functions ////
-
-string? document_filename(Gedit.Document document) {
-    string uri = document.get_uri();
-    if (uri == null)
-        return null;
-    try {
-        return Filename.from_uri(uri);
-    } catch (ConvertError e) { return null; }
-}
-
-Gedit.Tab? find_tab(string filename, out Gedit.Window window) {
-    string uri = filename_to_uri(filename);
-    
-    foreach (Gedit.Window w in Gedit.App.get_default().get_windows()) {
-        Gedit.Tab tab = w.get_tab_from_uri(uri);
-        if (tab != null) {
-            window = w;
-            return tab;
-        }
-    }
-    return null;
-}
-
