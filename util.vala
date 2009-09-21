@@ -10,16 +10,6 @@ extern void qsort(void *p, size_t num, size_t size, GLib.CompareFunc func);
 
 //// Helper data structures ////
 
-class Pair<G1, G2> : GLib.Object {
-    public G1 first;
-    public G2 second;
-    
-    public Pair(G1 object1, G2 object2) {
-        first = object1;
-        second = object2;
-    }
-}
-
 class Stack<G> : GLib.Object {
     Gee.ArrayList<G> container;
     
