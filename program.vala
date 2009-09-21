@@ -356,6 +356,10 @@ public class Block : Statement, Scope {
 
     public override ArrayList<Node>? children() { return statements; }
     
+    public Block() {
+        base(0, 0);     // caller will fill in start and end later
+    }
+    
     bool lookup(SymbolSet symbols, int pos) {
         foreach (Statement s in statements) {
             if (s.start > pos)
@@ -633,6 +637,7 @@ public class SourceFile : Node, Scope {
     public Namespace top;
     
     public SourceFile(Program? program, string filename) {
+        base(0, 0);
         this.program = program;
         this.filename = filename;
         alloc_top();
@@ -1209,8 +1214,8 @@ public class Program : Object {
     bool parse_vala_file(ArrayList<SourceFile> source_list) {
         if (sourcefile_paths.size == 0) {
             return false;
-	    }
-	
+        }
+    
         string path = sourcefile_paths.get(parse_list_index);
 
         // The index is incremented here because if an error happens, we want to skip this file
