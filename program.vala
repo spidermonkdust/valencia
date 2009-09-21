@@ -1090,7 +1090,7 @@ public class Program : Object {
             recursive_project = false;
         }
 
-        GLib.Idle.add(parse_local_vala_files_idle_callback);
+        idle_add(parse_local_vala_files_idle_callback);
         
         programs.add(this);
     }
@@ -1294,7 +1294,7 @@ public class Program : Object {
             parsing = true;
             parse_list_index = 0;
             sourcefile_paths.clear();
-            GLib.Idle.add(this.parse_system_vala_files_idle_callback);
+            idle_add(this.parse_system_vala_files_idle_callback);
         }
     }
     

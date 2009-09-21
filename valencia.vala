@@ -553,7 +553,7 @@ class Instance : Object {
             appended = true;
         }
         if (appended)
-            Idle.add(scroll_to_end);
+            idle_add(scroll_to_end);
         return ret;
     }
     
