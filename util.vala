@@ -71,6 +71,6 @@ void make_pipe(int fd, IOFunc func) throws IOChannelError {
 
 // a workaround for bug https://bugzilla.gnome.org/show_bug.cgi?id=595885 in Vala 0.7.6
 void idle_add(SourceFunc function, int priority = Priority.DEFAULT_IDLE) {
-    Idle.add(function, priority);
+    Idle.add_full(priority, function);
 }
 
