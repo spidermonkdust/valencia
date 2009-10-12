@@ -42,8 +42,8 @@ public class SymbolSet : Object {
         if (c != null) {
             if (exact) {
                 Symbol? s = c.lookup_constructor();
-                assert(s != null);
-                symbols.add(s);
+                if (s != null)
+                    symbols.add(s);
             } else {
                 // Recursively add subclass constructors to the set
                 foreach (Node n in c.members) {
