@@ -25,8 +25,8 @@ public class SymbolSet : Object {
         
         // Since the set stores Symbols, but we actually want to hash their (name) strings, we must
         // provide custom hash and equality functions
-        symbols.hash_func = Symbol.hash;
-        symbols.equal_func = Symbol.equal;
+        symbols.hash_func = (GLib.HashFunc) Symbol.hash;
+        symbols.equal_func = (GLib.EqualFunc) Symbol.equal;
     }
 
     public SymbolSet.empty() {

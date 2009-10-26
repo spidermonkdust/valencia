@@ -121,7 +121,7 @@ class SymbolBrowser {
             foreach (Symbol symbol in symbols)
                 symbol_names[i++] = symbol.name;
            
-            qsort(symbol_names, symbols.size, sizeof(string), compare_string);
+            qsort(symbol_names, symbols.size, sizeof(string), (GLib.CompareFunc) compare_string);
         } else symbol_names = new string[0];
         
         list.collate(symbol_names);

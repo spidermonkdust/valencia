@@ -144,7 +144,7 @@ class AutocompleteDialog : Object {
             ++i;
         }
             
-        qsort(list, symbols.size, sizeof(string), compare_string);
+        qsort(list, symbols.size, sizeof(string), (GLib.CompareFunc) compare_string);
         return list;
     }
 
