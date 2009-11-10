@@ -8,6 +8,8 @@ SOURCES = autocomplete.vala browser.vala expression.vala gtk_util.vala parser.va
 
 LIBS = --pkg vala-1.0 --pkg gedit-2.20 --pkg vte
 
+OUTPUTS = libvalencia.so valencia.gedit-plugin
+
 DIST_FILES = $(SOURCES) \
              Makefile \
              gedit-2.20.deps gedit-2.20.vapi valencia.gedit-plugin \
@@ -19,10 +21,13 @@ libvalencia.so: $(SOURCES)
 	@ pkg-config --print-errors --exists vala-1.0 gedit-2.20 vte
 	$(VALAC) $(VFLAGS) -X --shared -X -fPIC --vapidir=. $(LIBS) $^ -o $@
 
-install:
+install: libvalencia.so
 	@ [ `whoami` != "root" ] || ( echo 'Run make install as yourself, not as root.' ; exit 1 )
 	mkdir -p ~/.gnome2/gedit/plugins
-	cp libvalencia.so valencia.gedit-plugin ~/.gnome2/gedit/plugins
+	cp $(OUTPUTS) ~/.gnome2/gedit/plugins
+
+uninstall:
+	rm -f $(foreach o, $(OUTPUTS), ~/.gnome2/gedit/plugins/$o)
 
 parser:  expression.vala parser.vala program.vala scanner.vala util.vala
 	$(VALAC) $(VFLAGS) --pkg vala-1.0 --pkg gtk+-2.0 $^ -o $@
