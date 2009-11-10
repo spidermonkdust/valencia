@@ -206,6 +206,7 @@ class ProgressBarDialog : Gtk.Window {
 
         set_resizable(false);
         set_transient_for(parent_win);
+        set_position(Gtk.WindowPosition.CENTER_ON_PARENT);
         set_modal(true);
         show_all();
     }
