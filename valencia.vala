@@ -288,7 +288,11 @@ class Instance : Object {
         action_group.add_actions(entries, this);
         manager.insert_action_group(action_group, 0);
         
-        ui_id = manager.add_ui_from_string(ui, -1);
+        try {
+            ui_id = manager.add_ui_from_string(ui, -1);
+        } catch (Error e) {
+            error("error in add_ui_from_string: %s", e.message);
+        }
         
         initialize_menu_items(manager);
         init_error_regex();
@@ -539,6 +543,8 @@ class Instance : Object {
                 status = source.read_line(out line, out length, out terminator_pos);
             } catch (ConvertError e) {
                 return false;   // TODO: report error
+            } catch (IOChannelError e) {
+                return false;   // TODO: report error
             }
             if (status == IOStatus.EOF) {
                 if (error) {
@@ -596,8 +602,14 @@ class Instance : Object {
     
     void spawn_process(string command, string working_directory, ProcessFinished callback) {
         string[] argv;
-        if (!Shell.parse_argv(command, out argv)) {
-            warning("can't parse command arguments");
+        
+        try {
+            if (!Shell.parse_argv(command, out argv)) {
+                warning("can't parse command arguments");
+                return;
+            }
+        } catch (ShellError e) {
+            warning("error parsing command arguments: %s", e.message);
             return;
         }
         

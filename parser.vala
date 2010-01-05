@@ -689,10 +689,16 @@ void main(string[] args) {
     }
     string filename = args[1];
     string source;
-    if (!FileUtils.get_contents(filename, out source)) {
-        stderr.puts("can't read file\n");
+    try {
+        if (!FileUtils.get_contents(filename, out source)) {
+            stderr.puts("can't read file\n");
+            return;
+        }
+    } catch (FileError e) {
+        stderr.printf("error reading file: %s\n", e.message);
         return;
     }
+
     Valencia.SourceFile sf = new Valencia.SourceFile(null, filename);
     new Valencia.Parser().parse(sf, source);
     sf.print(0);
