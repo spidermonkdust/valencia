@@ -9,7 +9,10 @@ using Gee;
 namespace Valencia {
 
 public class SymbolSet : Object {
-    HashSet<Symbol> symbols = new HashSet<Symbol>();
+    // Since the set stores Symbols, but we actually want to hash their (name) strings, we must
+    // provide custom hash and equality functions
+    HashSet<Symbol> symbols = 
+        new HashSet<Symbol>((GLib.HashFunc) Symbol.hash, (GLib.EqualFunc) Symbol.equal);
     string name;
     bool exact;
     bool type;
@@ -22,11 +25,6 @@ public class SymbolSet : Object {
         this.exact = exact;
         this.constructor = constructor;
         this.local_symbols = local_symbols;
-        
-        // Since the set stores Symbols, but we actually want to hash their (name) strings, we must
-        // provide custom hash and equality functions
-        symbols.hash_func = (GLib.HashFunc) Symbol.hash;
-        symbols.equal_func = (GLib.EqualFunc) Symbol.equal;
     }
 
     public SymbolSet.empty() {

@@ -5,8 +5,8 @@ VALAC = valac
 
 SOURCES = autocomplete.vala browser.vala expression.vala gtk_util.vala parser.vala program.vala \
           scanner.vala settings.vala util.vala valencia.vala
-
-LIBS = --pkg vala-1.0 --pkg gedit-2.20 --pkg vte
+ 
+LIBS =--pkg vala-1.0 --pkg gedit-2.20 --pkg vte --pkg gee-1.0
 
 OUTPUTS = libvalencia.so valencia.gedit-plugin
 
@@ -18,7 +18,7 @@ DIST_TAR = $(PLUGIN)-$(VERSION).tar
 DIST_TAR_BZ2 = $(DIST_TAR).bz2
 
 libvalencia.so: $(SOURCES)
-	@ pkg-config --print-errors --exists vala-1.0 gedit-2.20 vte
+	@ pkg-config --print-errors --exists vala-1.0 gedit-2.20 vte gee-1.0
 	$(VALAC) $(VFLAGS) -X --shared -X -fPIC --vapidir=. $(LIBS) $^ -o $@
 
 install: libvalencia.so
