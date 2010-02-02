@@ -6,7 +6,14 @@ VALAC = valac
 SOURCES = autocomplete.vala browser.vala expression.vala gtk_util.vala parser.vala program.vala \
           scanner.vala settings.vala util.vala valencia.vala
  
-LIBS =--pkg vala-1.0 --pkg gedit-2.20 --pkg vte --pkg gee-1.0
+PACKAGES = --pkg gedit-2.20 --pkg gee-1.0 --pkg gtk+-2.0 --pkg vala-1.0 --pkg vte
+
+PACKAGE_VERSIONS = \
+    gedit-2.20 >= 2.24.0 \
+    gee-1.0 >= 0.1.3 \
+    gtk+-2.0 >= 2.14.4 \
+    vala-1.0 >= 0.7.10 \
+    vte >= 0.17.4
 
 OUTPUTS = libvalencia.so valencia.gedit-plugin
 
@@ -18,8 +25,8 @@ DIST_TAR = $(PLUGIN)-$(VERSION).tar
 DIST_TAR_BZ2 = $(DIST_TAR).bz2
 
 libvalencia.so: $(SOURCES)
-	@ pkg-config --print-errors --exists vala-1.0 gedit-2.20 vte gee-1.0
-	$(VALAC) $(VFLAGS) -X --shared -X -fPIC --vapidir=. $(LIBS) $^ -o $@
+	@ pkg-config --print-errors --exists '$(PACKAGE_VERSIONS)'
+	$(VALAC) $(VFLAGS) -X --shared -X -fPIC --vapidir=. $(PACKAGES) $^ -o $@
 
 install: libvalencia.so
 	@ [ `whoami` != "root" ] || ( echo 'Run make install as yourself, not as root.' ; exit 1 )
