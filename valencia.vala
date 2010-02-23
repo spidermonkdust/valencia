@@ -1,4 +1,4 @@
-/* Copyright 2009 Yorba Foundation
+/* Copyright 2009-2010 Yorba Foundation
  *
  * This software is licensed under the GNU Lesser General Public License
  * (version 2.1 or later).  See the COPYING file in this distribution. 
@@ -137,6 +137,7 @@ class Instance : Object {
 
     // Symbol pane
     SymbolBrowser symbol_browser;
+    ulong symbol_browser_connect_id;
 
     // Jump to definition history
     static ArrayList<Gtk.TextMark> history;
@@ -268,12 +269,12 @@ class Instance : Object {
         run_pane.show_all();
         
         panel.add_item_with_stock_icon(run_pane, "Run", Gtk.STOCK_EXECUTE);     
-        
+
         // Symbol pane
         symbol_browser = new SymbolBrowser(this);
-        Signal.connect(window, "active-tab-changed", (Callback) SymbolBrowser.on_active_tab_changed,
-                       symbol_browser);
-        
+        symbol_browser_connect_id = Signal.connect(window, "active-tab-changed", 
+            (Callback) SymbolBrowser.on_active_tab_changed, symbol_browser);
+
         // Enclosing class in statusbar
         old_cursor_offset = 0;
 
@@ -299,6 +300,14 @@ class Instance : Object {
 
         instance_connections.add_signal(window, "tab-added", (Callback) tab_added_callback, this);
         instance_connections.add_signal(window, "tab-removed", (Callback) tab_removed_callback, this);
+
+        foreach (Gedit.Document document in window.get_documents()) {
+            tab_added_callback(window, Gedit.Tab.get_from_document(document), this);
+        }
+    }
+
+    ~Instance() {
+        SignalHandler.disconnect(window, symbol_browser_connect_id);
     }
 
     void initialize_menu_items(Gtk.UIManager manager) {
@@ -701,13 +710,24 @@ class Instance : Object {
         if (saving == 0)
             build();
     }
-    
+
     void scroll_tab_to_iter(Gedit.Tab tab, Gtk.TextIter iter) {
         Gedit.View view = tab.get_view();
-        view.scroll_to_iter(iter, 0.2, false, 0.0, 0.0);
+        Gtk.TextMark mark = new Gtk.TextMark("valencia", false);
+        iter.get_buffer().add_mark(mark, iter);
+        // We don't use view.scroll_to_iter because, according to Devhelp
+        //   "Note that [scroll_to_iter] uses the currently-computed height of the
+        //   lines in the text buffer.  Line heights are computed in an idle
+        //   handler; so this function may not have the desired effect if it's called
+        //   before the height computations.  To avoid oddness, consider using
+        //   gtk_text_view_scroll_to_mark() which saves a point to be scrolled
+        //   to after line validation."
+
+        view.scroll_to_mark(mark, 0.2, false, 0.0, 0.0);
+        iter.get_buffer().delete_mark(mark);
         view.grab_focus();
     }
-  
+
     void go(Gedit.Tab tab, Destination dest) {
         Gedit.Document document = tab.get_document();
         Gtk.TextIter start;
