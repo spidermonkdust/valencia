@@ -385,7 +385,7 @@ public class Parser : Object {
 
     void skip_attributes() {
         while (accept(Token.LEFT_BRACKET))
-            while (next_token() != Token.RIGHT_BRACKET)
+            while (!scanner.eof() && next_token() != Token.RIGHT_BRACKET)
                 ;
     }
 
