@@ -1,5 +1,7 @@
 PLUGIN = valencia
-VERSION = 0.2.1
+
+# The version number appears here and also in valencia.gedit-plugin.
+VERSION = 0.2.1+trunk
 
 VALAC = valac
 
@@ -23,10 +25,11 @@ DIST_FILES = $(SOURCES) \
              AUTHORS COPYING INSTALL NEWS README THANKS
 DIST_TAR = $(PLUGIN)-$(VERSION).tar
 DIST_TAR_BZ2 = $(DIST_TAR).bz2
+DIST_TAR_GZ = $(DIST_TAR).gz
 
-libvalencia.so: $(SOURCES)
+libvalencia.so: $(SOURCES) Makefile
 	@ pkg-config --print-errors --exists '$(PACKAGE_VERSIONS)'
-	$(VALAC) $(VFLAGS) -X --shared -X -fPIC --vapidir=. $(PACKAGES) $^ -o $@
+	$(VALAC) $(VFLAGS) -X --shared -X -fPIC --vapidir=. $(PACKAGES) $(SOURCES) -o $@
 
 install: libvalencia.so
 	@ [ `whoami` != "root" ] || ( echo 'Run make install as yourself, not as root.' ; exit 1 )
@@ -39,11 +42,12 @@ uninstall:
 parser:  expression.vala parser.vala program.vala scanner.vala util.vala
 	$(VALAC) $(VFLAGS) --pkg vala-1.0 --pkg gtk+-2.0 $^ -o $@
 
-$(DIST_TAR_BZ2): $(DIST_FILES)
-	tar -cv $(DIST_FILES) > $(DIST_TAR)
-	bzip2 $(DIST_TAR)
-
-dist: $(DIST_TAR_BZ2)
+dist: $(DIST_FILES)
+	mkdir -p $(PLUGIN)-$(VERSION)
+	cp --parents $(DIST_FILES) $(PLUGIN)-$(VERSION)
+	tar --bzip2 -cvf $(DIST_TAR_BZ2) $(PLUGIN)-$(VERSION)
+	tar --gzip -cvf $(DIST_TAR_GZ) $(PLUGIN)-$(VERSION)
+	rm -rf $(PLUGIN)-$(VERSION)
 
 clean:
 	rm -f $(SOURCES:.vala=.c) $(SOURCES:.vala=.h) *.so
