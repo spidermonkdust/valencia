@@ -897,7 +897,7 @@ class Instance : Object {
         }
     }
     
-    void get_buffer_str_and_pos(string filename, out weak string source, out int pos) {
+    void get_buffer_str_and_pos(string filename, out unowned string source, out int pos) {
         reparse_modified_documents(filename);
         
         Gedit.Document document = window.get_active_document();

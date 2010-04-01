@@ -303,11 +303,11 @@ class Scanner : Object {
         return start_char.ndup(bytes);
     }
 
-    public weak string get_start() {
+    public unowned string get_start() {
         return start_char;
     }
 
-    public weak string get_start_after_comments() {
+    public unowned string get_start_after_comments() {
         // Skip any comments after the end character and take the first character after them
         peek_token();
         return token_start_char;

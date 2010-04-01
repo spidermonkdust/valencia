@@ -50,7 +50,7 @@ Gtk.TextIter iter_at_line_offset(Gtk.TextBuffer buffer, int line, int offset) {
     return ret;
 }
 
-weak string buffer_contents(Gtk.TextBuffer buffer) {
+unowned string buffer_contents(Gtk.TextBuffer buffer) {
     Gtk.TextIter start;
     Gtk.TextIter end;
     buffer.get_bounds(out start, out end);
