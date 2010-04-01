@@ -142,9 +142,11 @@ public class Parser : Object {
                     if (!accept(Token.COMMA))
                         break;
                 }
-                Token token = peek_token();
-                if (accept(Token.RIGHT_PAREN) && (token == Token.SEMICOLON || token == Token.COMMA))
-                    return type;
+                if (accept(Token.RIGHT_PAREN)) {
+                    Token token = peek_token();
+                    if (token == Token.SEMICOLON || token == Token.COMMA)
+                        return type;
+                }
             }
         }
 
