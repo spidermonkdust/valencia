@@ -1166,7 +1166,7 @@ public class Program : Object {
     }
 
     bool parse_local_vala_files_idle_callback() {
-        if (sourcefile_paths.size == 0) {
+        if (sourcefile_paths.is_empty) {
             // Don't parse system files locally!
             string system_directory = get_system_vapi_directory();
             if (top_directory == system_directory || 
@@ -1210,7 +1210,7 @@ public class Program : Object {
     // Takes the next vala file in the sources path list and parses it. Returns true if there are
     // more files to parse, false if there are not.
     bool parse_vala_file(ArrayList<SourceFile> source_list) {
-        if (sourcefile_paths.size == 0) {
+        if (sourcefile_paths.is_empty) {
             return false;
         }
     
@@ -1240,7 +1240,8 @@ public class Program : Object {
         return parse_list_index != sourcefile_paths.size;
     }
 
-    // returns the total size of the files
+    // Find all Vala files in the given directory (and its subdirectories, if recursive is true)
+    // and store them in sourcefile_paths.  Returns the total size of the files.
     int cache_source_paths_in_directory(string directory, bool recursive) {
         parse_list_index = 0;
         
@@ -1266,12 +1267,11 @@ public class Program : Object {
                 sourcefile_paths.add(path);
                 
                 try {
-                GLib.File sourcefile = GLib.File.new_for_path(path);
-                GLib.FileInfo info = sourcefile.query_info("standard::size", 
-                                                           GLib.FileQueryInfoFlags.NONE, null);
-                total_filesize += (int) info.get_size();
-                } catch (GLib.Error e) {
-                }
+                    GLib.File sourcefile = GLib.File.new_for_path(path);
+                    GLib.FileInfo info = sourcefile.query_info("standard::size", 
+                                                               GLib.FileQueryInfoFlags.NONE, null);
+                    total_filesize += (int) info.get_size();
+                } catch (GLib.Error e) { }
             }
             else if (recursive && GLib.FileUtils.test(path, GLib.FileTest.IS_DIR))
                 total_filesize += cache_source_paths_in_directory(path, true);
@@ -1393,31 +1393,28 @@ public class Program : Object {
         if (programs == null)
             programs = new ArrayList<Program>();
             
-        foreach (Program p in programs) {
-            if (p.recursive_project && dir_has_parent(dir, p.get_top_directory()))
+        foreach (Program p in programs)
+            if (p.top_directory == dir ||
+                p.recursive_project && dir_has_parent(dir, p.top_directory))
                 return p;
-            else if (p.top_directory == dir)
-                return p;
-        }
+                
         return null;
     }
     
+    // Find or create the Program containing the source file with the given path.
     public static Program find_containing(string path, bool parse_system_vapi = false) {
         string dir = Path.get_dirname(path);
         Program p = find_program(dir);
+        if (p == null)
+            p = new Program(dir);
         
-        if (parse_system_vapi) {
-            if (p == null)
-                p = new Program(dir);
+        if (parse_system_vapi)
             p.parse_system_vapi_files();
-        }
         
-        return (p != null) ? p : new Program(dir);
+        return p;
     }
     
-    public static Program? null_find_containing(string? path) {
-        if (path == null)
-            return null;
+    public static Program? find_existing(string path) {
         string dir = Path.get_dirname(path);
         return find_program(dir);    
     }

@@ -897,7 +897,7 @@ class Instance : Object {
         }
     }
     
-    void get_buffer_str_and_pos(string filename, out unowned string source, out int pos) {
+    void get_buffer_contents_and_position(string filename, out unowned string source, out int pos) {
         reparse_modified_documents(filename);
         
         Gedit.Document document = window.get_active_document();
@@ -926,7 +926,7 @@ class Instance : Object {
             
         weak string source;
         int pos;
-        get_buffer_str_and_pos(filename, out source, out pos);
+        get_buffer_contents_and_position(filename, out source, out pos);
 
         ScanInfo info = get_scan_info(false);
         if (info == null || info.inner() == null)
@@ -951,7 +951,7 @@ class Instance : Object {
 
         weak string source;
         int pos;
-        get_buffer_str_and_pos(filename, out source, out pos);
+        get_buffer_contents_and_position(filename, out source, out pos);
 
         ScanScope? scan_scope = new Parser().find_enclosing_scope(source, pos, false);
         if (scan_scope == null)
@@ -1155,7 +1155,7 @@ class Instance : Object {
         return Program.find_containing(filename);
     }
 
-    public bool active_document_is_valid_vala_file() {
+    public bool active_document_is_vala_file() {
         string filename = active_filename();
         return filename != null && Program.is_vala(filename);
     }
@@ -1376,7 +1376,7 @@ class Instance : Object {
     
         string? filename = active_filename();
         weak string source;
-        get_buffer_str_and_pos(filename, out source, out cursor_pos); 
+        get_buffer_contents_and_position(filename, out source, out cursor_pos); 
 
         parse_info = new ExpressionParser(source, cursor_pos, partial).parse();
 
@@ -1490,11 +1490,11 @@ void on_clean() {
 
     bool program_exists_for_active_document() {
         string filename = active_filename();
-        return Program.null_find_containing(filename) != null;
+        return filename != null && Program.find_existing(filename) != null;
     }
 
     void on_search_menu_activated() {
-        bool document_is_vala_file = active_document_is_valid_vala_file();
+        bool document_is_vala_file = active_document_is_vala_file();
         go_to_definition_menu_item.set_sensitive(document_is_vala_file);
         find_symbol_menu_item.set_sensitive(document_is_vala_file);
         go_to_outer_scope_menu_item.set_sensitive(document_is_vala_file);

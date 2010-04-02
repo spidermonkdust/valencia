@@ -8,7 +8,7 @@ using Gee;
 using Valencia;
 
 class SymbolBrowser {
-    weak Instance parent;
+    weak Instance instance;
 
     Gtk.Entry find_entry;
     ListViewString list;
@@ -16,8 +16,8 @@ class SymbolBrowser {
     
     bool visible;
 
-    public SymbolBrowser(Instance parent) {
-        this.parent = parent;
+    public SymbolBrowser(Instance instance) {
+        this.instance = instance;
 
         find_entry = new Gtk.Entry();
         find_entry.activate += on_entry_activated;
@@ -34,7 +34,7 @@ class SymbolBrowser {
         symbol_vbox.pack_start(list.scrolled_window, true, true, 0);
         symbol_vbox.show_all();
 
-        weak Gedit.Panel panel = this.parent.window.get_side_panel();
+        weak Gedit.Panel panel = instance.window.get_side_panel();
         panel.add_item_with_stock_icon(symbol_vbox, "Symbols", Gtk.STOCK_FIND);
         
         panel.show += on_panel_open;
@@ -61,8 +61,8 @@ class SymbolBrowser {
     }
 
     bool on_receive_focus() {
-        if (parent.active_document_is_valid_vala_file()) {
-            parent.reparse_modified_documents(parent.active_filename());
+        if (instance.active_document_is_vala_file()) {
+            instance.reparse_modified_documents(instance.active_filename());
             on_update_symbols();
         }
         
@@ -75,7 +75,7 @@ class SymbolBrowser {
     }
 
     void on_update_symbols() {
-        string document_path = parent.active_filename();
+        string document_path = instance.active_filename();
         if (document_path == null || !Program.is_vala(document_path))
             return;
         
@@ -87,11 +87,11 @@ class SymbolBrowser {
     }
 
     SourceFile get_current_sourcefile() {
-        string document_path = parent.active_filename();
+        string document_path = instance.active_filename();
         Program program = Program.find_containing(document_path);    
         SourceFile? sf = program.find_source(document_path);
         if (sf == null) {
-            Gedit.Document doc = parent.window.get_active_document();
+            Gedit.Document doc = instance.window.get_active_document();
             program.update(document_path, buffer_contents(doc));
             sf = program.find_source(document_path);
         }
@@ -101,7 +101,7 @@ class SymbolBrowser {
     }
 
     void update_symbols() {
-        if (!parent.active_document_is_valid_vala_file()) {
+        if (!instance.active_document_is_vala_file()) {
             list.clear();
             return;
         }
@@ -128,7 +128,7 @@ class SymbolBrowser {
     }
 
     void jump_to_symbol(string symbol_name) {
-        if (!parent.active_document_is_valid_vala_file())
+        if (!instance.active_document_is_vala_file())
             return;
 
         Expression id = new Id(symbol_name);
@@ -138,7 +138,7 @@ class SymbolBrowser {
         if (symbol == null)
             return;
 
-        parent.jump(symbol.source.filename, 
+        instance.jump(symbol.source.filename, 
                     new CharRange(symbol.start, symbol.start + (int) symbol.name.length));
     }
 
@@ -159,11 +159,11 @@ class SymbolBrowser {
     }
 
     public void set_parent_instance_focus() {
-        Gedit.Panel panel = parent.window.get_side_panel();
+        Gedit.Panel panel = instance.window.get_side_panel();
         panel.show();
         
         panel.activate_item(symbol_vbox);
-        parent.window.set_focus(find_entry);
+        instance.window.set_focus(find_entry);
     }
 
 }
