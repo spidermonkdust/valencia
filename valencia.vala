@@ -364,7 +364,9 @@ class Instance : Object {
         // Hook up this particular tab's view with tooltips
         Gedit.View tab_view = tab.get_view();
         connection.add_signal(tab_view, "key-press-event", (Callback) key_press_callback, instance);
-        
+        connection.add_signal(tab_view, "show-completion",
+            (Callback) show_completion_callback, instance);
+
         Gtk.Widget widget = tab_view.get_parent();
         Gtk.ScrolledWindow scrolled_window = widget as Gtk.ScrolledWindow;
         assert(scrolled_window != null);
@@ -407,6 +409,10 @@ class Instance : Object {
     static void scrolled_callback(Gtk.Adjustment adjust, Instance instance) {
         instance.tip.hide();
         instance.autocomplete.hide();
+    }
+
+    static void show_completion_callback(Gedit.View view, Instance instance) {
+        instance.on_display_tooltip_or_autocomplete();
     }
 
     static bool key_press_callback(Gedit.View view, Gdk.EventKey key, Instance instance) {
@@ -1327,7 +1333,7 @@ class Instance : Object {
             return;
 
         Program program = Program.find_containing(filename, true);
-        
+
         if (program.is_parsing()) {
             program.parsed_file += update_parse_dialog;
             program.system_parse_complete += display_tooltip_or_autocomplete;
