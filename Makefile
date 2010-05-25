@@ -1,7 +1,7 @@
 PLUGIN = valencia
 
 # The version number appears here and also in valencia.gedit-plugin.
-VERSION = 0.2.1+trunk
+VERSION = 0.3.0
 
 VALAC = valac
 

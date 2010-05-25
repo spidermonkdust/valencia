@@ -19,9 +19,9 @@ Build Valencia and enable it in gedit as described in the INSTALL file.  If all
 Vala source files in your project are contained in a single directory and that
 directory has a Makefile, Valencia will work with no extra configuration.  If
 your project has multiple directory levels, you'll need to ensure that the
-top directory contains either a file named configure.ac, a file named configure.in
-or a Makefile containing the line BUILD_ROOT = 1; this is how Valencia identifies
-the project root.
+top directory contains either a file named configure.ac, a file named 
+configure.in or a Makefile containing the line BUILD_ROOT = 1; this is how 
+Valencia identifies the project root.
 
 To use Valencia, place the cursor on any symbol in a Vala file and press F12
 to jump to its definition.  Press Alt+Left to return to where the cursor was
@@ -29,12 +29,18 @@ before you pressed F12.  To build your project, choose Project->Build or type
 Shift+Ctrl+B.  To jump to a line with a build error, simply double-click
 the error in the build output.
 
-To get a tooltip for a method, press Ctrl+Space anywhere inside of a method call. 
-To invoke autocomplete on a symbol, press Ctrl+Space on any word. If you are inside
-a method call, and want to get autocomplete, press Ctrl+Space twice, once to get
-a tooltip, then again to get the autocomplete list.
+To get a tooltip for a method, press Ctrl+Space anywhere inside of a method 
+call. To invoke autocomplete on a symbol, press Ctrl+Space on any word. If you 
+are inside a method call, and want to get autocomplete, press Ctrl+Space twice, 
+once to get a tooltip, then again to get the autocomplete list.
 
-For more information, see the Valencia documentation at http://trac.yorba.org/wiki/Valencia.
+The symbol browser lists symbols only in your project. It looks within local
+namespaces to find all top-level symbols. To search for a symbol, choose 
+Search->Find Symbol... or press Ctrl+Alt+S to go to the search entry, where
+you can type the name of the symbol to which you want to find.
+
+For more information, see the Valencia documentation at
+http://trac.yorba.org/wiki/Valencia.
 
 * Contacting Yorba
     
@@ -47,5 +53,5 @@ with a subject: line of "subscribe" (no quotes) to
 valencia-request@lists.yorba.org.
     
     
-Copyright 2009 Yorba Foundation
+Copyright 2009-2010 Yorba Foundation
 
