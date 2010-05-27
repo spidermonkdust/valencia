@@ -2,7 +2,7 @@
 Module=valencia
 IAge=2
 Name=Valencia
-Version=0.2.1+trunk
+Version=VERSION
 Description=gedit extensions for Vala
 Icon=valencia
 Authors=Adam Dingle <adam@yorba.org>\nReuben Dunnington<reuben@yorba.org>

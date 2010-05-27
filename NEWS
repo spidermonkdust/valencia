@@ -1,4 +1,15 @@
-Valencia 0.2.1 - August 10, 2009
+Valencia 0.3.0 - May 27, 2010
+-----------------------------
+
+Third release. New features include:
+ * Symbol browser
+ * Customizable build options
+ * Clean project command
+ * Many parser bugfixes and enhancements
+ * Misc. other bugfixes and enhancements
+ * Support for vala 0.8.*
+
+ Valencia 0.2.1 - August 10, 2009
 --------------------------------
 
 Minor bugfix release:

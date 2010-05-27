@@ -21,7 +21,8 @@ OUTPUTS = libvalencia.so valencia.gedit-plugin
 
 DIST_FILES = $(SOURCES) \
              Makefile \
-             gedit-2.20.deps gedit-2.20.vapi valencia.gedit-plugin valencia.png \
+             gedit-2.20.deps gedit-2.20.vapi valencia.png \
+             valencia.gedit-plugin valencia.gedit-plugin.m4 \
              AUTHORS COPYING INSTALL NEWS README THANKS
 DIST_TAR = $(PLUGIN)-$(VERSION).tar
 DIST_TAR_BZ2 = $(DIST_TAR).bz2
@@ -29,11 +30,17 @@ DIST_TAR_GZ = $(DIST_TAR).gz
 
 ICON_DIR = ~/.local/share/icons/hicolor/128x128/apps
 
+all: valencia.gedit-plugin libvalencia.so
+	
+
+valencia.gedit-plugin: valencia.gedit-plugin.m4 Makefile
+	m4 -DVERSION='$(VERSION)' valencia.gedit-plugin.m4 > valencia.gedit-plugin
+
 libvalencia.so: $(SOURCES) Makefile
 	@ pkg-config --print-errors --exists '$(PACKAGE_VERSIONS)'
 	$(VALAC) $(VFLAGS) -X --shared -X -fPIC --vapidir=. $(PACKAGES) $(SOURCES) -o $@
 
-install: libvalencia.so
+install: libvalencia.so valencia.gedit-plugin
 	@ [ `whoami` != "root" ] || ( echo 'Run make install as yourself, not as root.' ; exit 1 )
 	mkdir -p ~/.gnome2/gedit/plugins
 	cp $(OUTPUTS) ~/.gnome2/gedit/plugins
@@ -56,4 +63,5 @@ dist: $(DIST_FILES)
 
 clean:
 	rm -f $(SOURCES:.vala=.c) $(SOURCES:.vala=.h) *.so
+	rm -f valencia.gedit-plugin
 
