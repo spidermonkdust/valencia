@@ -719,8 +719,14 @@ class Instance : Object {
 
     void scroll_tab_to_iter(Gedit.Tab tab, Gtk.TextIter iter) {
         Gedit.View view = tab.get_view();
-        Gtk.TextMark mark = new Gtk.TextMark("valencia", false);
-        iter.get_buffer().add_mark(mark, iter);
+
+        Gtk.TextMark mark = iter.get_buffer().get_mark("valencia");
+        if (mark == null) {
+            mark = new Gtk.TextMark("valencia", false);
+            iter.get_buffer().add_mark(mark, iter);
+        } else {
+            iter.get_buffer().move_mark(mark, iter);
+        }
         // We don't use view.scroll_to_iter because, according to Devhelp
         //   "Note that [scroll_to_iter] uses the currently-computed height of the
         //   lines in the text buffer.  Line heights are computed in an idle
@@ -728,9 +734,7 @@ class Instance : Object {
         //   before the height computations.  To avoid oddness, consider using
         //   gtk_text_view_scroll_to_mark() which saves a point to be scrolled
         //   to after line validation."
-
         view.scroll_to_mark(mark, 0.2, false, 0.0, 0.0);
-        iter.get_buffer().delete_mark(mark);
         view.grab_focus();
     }
 
