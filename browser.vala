@@ -20,14 +20,14 @@ class SymbolBrowser {
         this.instance = instance;
 
         find_entry = new Gtk.Entry();
-        find_entry.activate += on_entry_activated;
-        find_entry.changed += on_text_changed;
-        find_entry.focus_in_event += on_receive_focus;
+        find_entry.activate.connect(on_entry_activated);
+        find_entry.changed.connect(on_text_changed);
+        find_entry.focus_in_event.connect(on_receive_focus);
 
         // A width of 175 pixels is a sane minimum; the user can always expand this to be bigger
         list = new ListViewString(Gtk.TreeViewColumnSizing.FIXED, 175);
-        list.row_activated += on_list_activated;
-        list.received_focus += on_list_receive_focus;
+        list.row_activated.connect(on_list_activated);
+        list.received_focus.connect(on_list_receive_focus);
 
         symbol_vbox = new Gtk.VBox(false, 6);
         symbol_vbox.pack_start(find_entry, false, false, 0);
@@ -37,15 +37,15 @@ class SymbolBrowser {
         weak Gedit.Panel panel = instance.window.get_side_panel();
         panel.add_item_with_stock_icon(symbol_vbox, "Symbols", Gtk.STOCK_FIND);
         
-        panel.show += on_panel_open;
-        panel.hide += on_panel_hide;
+        panel.show.connect(on_panel_open);
+        panel.hide.connect(on_panel_hide);
     }
 
     void on_text_changed() {
         on_update_symbols();
     }
 
-    void on_panel_open(Gedit.Panel panel) {
+    void on_panel_open() {
         visible = true;
         on_receive_focus();
     }
@@ -82,7 +82,7 @@ class SymbolBrowser {
         Program program = Program.find_containing(document_path);
 
         if (program.is_parsing())
-            program.system_parse_complete += update_symbols;
+            program.system_parse_complete.connect(update_symbols);
         else update_symbols();
     }
 

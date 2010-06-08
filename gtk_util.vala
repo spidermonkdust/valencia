@@ -279,7 +279,7 @@ class ListViewString : Object {
         treeview = new Gtk.TreeView.with_model(list);
         treeview.append_column(column_view);
         treeview.headers_visible = false;
-        treeview.focus_in_event += on_received_focus;
+        treeview.focus_in_event.connect(on_received_focus);
 
         scrolled_window = new Gtk.ScrolledWindow(null, null); 
         scrolled_window.hscrollbar_policy = Gtk.PolicyType.NEVER;

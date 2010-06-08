@@ -229,7 +229,7 @@ class Instance : Object {
               
         // Settings dialog
         settings_dialog = new ProjectSettingsDialog(window);
-        settings_dialog.settings_changed += on_settings_changed;
+        settings_dialog.settings_changed.connect(on_settings_changed);
 
         // Tooltips        
         tip = new Tooltip(window);
@@ -248,7 +248,7 @@ class Instance : Object {
         output_view.set_cursor_visible(false);
         Pango.FontDescription font = Pango.FontDescription.from_string("Monospace");
         output_view.modify_font(font);
-        output_view.button_press_event += on_button_press;
+        output_view.button_press_event.connect(on_button_press);
 
         output_pane = new Gtk.ScrolledWindow(null, null);
         output_pane.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC);
@@ -260,7 +260,7 @@ class Instance : Object {
 
         // Run pane
         run_terminal = new Vte.Terminal();
-        run_terminal.child_exited += on_run_child_exit;
+        run_terminal.child_exited.connect(on_run_child_exit);
         child_process_running = false;
         
         run_pane = new Gtk.ScrolledWindow(null, null);
@@ -312,10 +312,10 @@ class Instance : Object {
 
     void initialize_menu_items(Gtk.UIManager manager) {
         Gtk.MenuItem search_menu = get_menu_item(manager, "/MenuBar/SearchMenu");
-        search_menu.activate += on_search_menu_activated;
+        search_menu.activate.connect(on_search_menu_activated);
         
         Gtk.MenuItem project_menu = get_menu_item(manager, "/MenuBar/ExtraMenu_1/ProjectMenu");
-        project_menu.activate += on_project_menu_activated;
+        project_menu.activate.connect(on_project_menu_activated);
         
         go_to_definition_menu_item = get_menu_item(manager,
             "/MenuBar/SearchMenu/SearchOps_8/SearchGoToDefinitionMenu");
@@ -924,8 +924,8 @@ class Instance : Object {
         Program program = Program.find_containing(filename, true);
         
         if (program.is_parsing()) {
-            program.parsed_file += update_parse_dialog;
-            program.system_parse_complete += jump_to_symbol_definition;
+            program.parsed_file.connect(update_parse_dialog);
+            program.system_parse_complete.connect(jump_to_symbol_definition);
         } else jump_to_symbol_definition();
     }
 
@@ -1041,7 +1041,7 @@ class Instance : Object {
         }
     }
 
-    bool on_button_press(Gtk.TextView view, Gdk.EventButton event) {
+    bool on_button_press(Gdk.EventButton event) {
         if (event.type != Gdk.EventType.2BUTTON_PRESS)  // double click?
             return false;   // return if not
         Gtk.TextIter iter = get_insert_iter(output_buffer);
@@ -1339,8 +1339,8 @@ class Instance : Object {
         Program program = Program.find_containing(filename, true);
 
         if (program.is_parsing()) {
-            program.parsed_file += update_parse_dialog;
-            program.system_parse_complete += display_tooltip_or_autocomplete;
+            program.parsed_file.connect(update_parse_dialog);
+            program.system_parse_complete.connect(display_tooltip_or_autocomplete);
         } else display_tooltip_or_autocomplete();
     }
 

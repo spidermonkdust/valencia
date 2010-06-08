@@ -21,14 +21,14 @@ class ProjectSettingsDialog : Object {
         // Window creation
         Gtk.Label build_command_label = new Gtk.Label("Build command:");
         build_entry = new Gtk.Entry();
-        build_entry.activate += on_entry_activated;
+        build_entry.activate.connect(on_entry_activated);
         
         Gtk.Alignment align_build_label = new Gtk.Alignment(0.0f, 0.5f, 0.0f, 0.0f);
         align_build_label.add(build_command_label);
 
         Gtk.Label clean_command_label = new Gtk.Label("Clean command:");
         clean_entry = new Gtk.Entry();
-        clean_entry.activate += on_entry_activated;
+        clean_entry.activate.connect(on_entry_activated);
         
         Gtk.Alignment align_clean_label = new Gtk.Alignment(0.0f, 0.5f, 0.0f, 0.0f);
         align_clean_label.add(clean_command_label);
@@ -56,7 +56,7 @@ class ProjectSettingsDialog : Object {
                                              Gtk.STOCK_OK, Gtk.ResponseType.OK, null);
         dialog.set_default_response(Gtk.ResponseType.OK);
         dialog.set_default_size(350, 10);
-        dialog.delete_event += dialog.hide_on_delete;
+        dialog.delete_event.connect(dialog.hide_on_delete);
 
         dialog.vbox.pack_start(alignment_box, false, false, 0);
         // Make all children visible by default

@@ -1287,7 +1287,7 @@ public class Program : Object {
 
         // Only begin parsing vapi files after the local vapi files have been parsed        
         if (is_parsing()) {
-            local_parse_complete += parse_system_vapi_files;
+            local_parse_complete.connect(parse_system_vapi_files);
         } else {
             parsing = true;
             parse_list_index = 0;

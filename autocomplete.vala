@@ -20,7 +20,7 @@ class AutocompleteDialog : Object {
         visible = false;
         inserting_text = false;
         list = new ListViewString(Gtk.TreeViewColumnSizing.AUTOSIZE, 100);
-        list.row_activated += select_item;
+        list.row_activated.connect(select_item);
 
         window = new Gtk.Window(Gtk.WindowType.POPUP); 
         window.add(list.scrolled_window);
