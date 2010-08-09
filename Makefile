@@ -8,13 +8,13 @@ VALAC = valac
 SOURCES = autocomplete.vala browser.vala expression.vala gtk_util.vala parser.vala program.vala \
           scanner.vala settings.vala util.vala valencia.vala
  
-PACKAGES = --pkg gedit-2.20 --pkg gee-1.0 --pkg gtk+-2.0 --pkg vala-1.0 --pkg vte
+PACKAGES = --pkg gedit-2.20 --pkg gee-1.0 --pkg gtk+-2.0 --pkg vala-0.10 --pkg vte
 
 PACKAGE_VERSIONS = \
     gedit-2.20 >= 2.24.0 \
     gee-1.0 >= 0.1.3 \
     gtk+-2.0 >= 2.14.4 \
-    vala-1.0 >= 0.7.10 \
+    vala-0.10 >= 0.9.5 \
     vte >= 0.17.4
 
 OUTPUTS = libvalencia.so valencia.gedit-plugin
