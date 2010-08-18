@@ -1553,9 +1553,9 @@ void on_clean() {
 class Plugin : Gedit.Plugin {
     public Gee.ArrayList<Instance> instances = new Gee.ArrayList<Instance>();
 
-    // This empty construct block eliminates a build warning about chaining up to a private 
-    // base constructor.
-    construct { }
+    Plugin() {
+        Object();
+    }
 
     public override void activate(Gedit.Window window) {
         Instance new_instance = new Instance(window, this);
