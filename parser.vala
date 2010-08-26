@@ -368,6 +368,7 @@ public class Parser : Object {
     bool is_modifier(Token t) {
         switch (t) {
             case Token.ABSTRACT:
+            case Token.ASYNC:
             case Token.CONST:
             case Token.EXTERN:
             case Token.INLINE:
