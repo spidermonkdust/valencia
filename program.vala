@@ -1148,7 +1148,7 @@ public class Program : Object {
         top_directory = Path.get_dirname(makefile.path);
     }
 
-    string get_system_vapi_directory() {
+    string get_versioned_vapi_directory() {
         // Sort of a hack to get the path to the system vapi file directory. Gedit may hang or 
         // crash if the vala compiler .so is not present...
         string[] null_dirs = {};
@@ -1156,7 +1156,24 @@ public class Program : Object {
         string path = context.get_package_path("gobject-2.0", null_dirs);
         return Path.get_dirname(path);
     }
-    
+
+    Gee.ArrayList<string> get_unversioned_vapi_directories() {
+        Gee.ArrayList<string> valid_data_dirs = new Gee.ArrayList<string>();
+        foreach (unowned string data_dir in Environment.get_system_data_dirs()) {
+            string temp_path = Path.build_filename(data_dir, "vala", "vapi");
+            if (FileUtils.test(temp_path, FileTest.EXISTS)) {
+                valid_data_dirs.add(temp_path);
+            }
+        }
+        return valid_data_dirs;
+    }
+
+    Gee.ArrayList<string> get_system_vapi_directories() {
+        Gee.ArrayList<string> directories = get_unversioned_vapi_directories();
+        directories.add(get_versioned_vapi_directory());
+        return directories;
+    }
+
     void finish_local_parse() {
         parsing = false;
         local_parse_complete();
@@ -1168,11 +1185,12 @@ public class Program : Object {
     bool parse_local_vala_files_idle_callback() {
         if (sourcefile_paths.is_empty) {
             // Don't parse system files locally!
-            string system_directory = get_system_vapi_directory();
-            if (top_directory == system_directory || 
-                (recursive_project && dir_has_parent(system_directory, top_directory))) {
-                finish_local_parse();
-                return false;
+            foreach (string system_directory in get_system_vapi_directories()) {
+                if (top_directory == system_directory || 
+                    (recursive_project && dir_has_parent(system_directory, top_directory))) {
+                    finish_local_parse();
+                    return false;
+                }
             }
             
             cache_source_paths_in_directory(top_directory, recursive_project);
@@ -1191,8 +1209,9 @@ public class Program : Object {
 
     bool parse_system_vala_files_idle_callback() {
         if (sourcefile_paths.size == 0) {
-            string system_directory = get_system_vapi_directory();
-            cache_source_paths_in_directory(system_directory, true);
+            foreach (string system_directory in get_system_vapi_directories()) {
+                cache_source_paths_in_directory(system_directory, true);
+            }
         }
 
         for (int i = 0; i < 3; ++i) {

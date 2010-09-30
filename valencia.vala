@@ -907,7 +907,7 @@ class Instance : Object {
         }
     }
     
-    void get_buffer_contents_and_position(string filename, out unowned string source, out int pos) {
+    void get_buffer_contents_and_position(string filename, out string source, out int pos) {
         reparse_modified_documents(filename);
         
         Gedit.Document document = window.get_active_document();
@@ -934,7 +934,7 @@ class Instance : Object {
         if (filename == null)
             return;
             
-        weak string source;
+        string source;
         int pos;
         get_buffer_contents_and_position(filename, out source, out pos);
 
@@ -959,7 +959,7 @@ class Instance : Object {
         if (filename == null || !Program.is_vala(filename))
             return;
 
-        weak string source;
+        string source;
         int pos;
         get_buffer_contents_and_position(filename, out source, out pos);
 
@@ -1307,7 +1307,7 @@ class Instance : Object {
             return;
 
         Gedit.Document document = window.get_active_document();
-        weak string source = buffer_contents(document);
+        string source = buffer_contents(document);
         Gtk.TextIter insert = get_insert_iter(document);
         int pos = insert.get_offset();
         
@@ -1385,7 +1385,7 @@ class Instance : Object {
         int cursor_pos;
     
         string? filename = active_filename();
-        weak string source;
+        string source;
         get_buffer_contents_and_position(filename, out source, out cursor_pos); 
 
         parse_info = new ExpressionParser(source, cursor_pos, partial).parse();
