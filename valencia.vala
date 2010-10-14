@@ -385,7 +385,7 @@ class Instance : Object {
 
     static void tab_removed_callback(Gedit.Window window, Gedit.Tab tab, Instance instance) {
         weak Gedit.Document removed_document = tab.get_document();
-        bool document_exists_in_map = documents_modified_state.remove(removed_document);
+        bool document_exists_in_map = documents_modified_state.unset(removed_document);
         assert(document_exists_in_map);
 
         foreach (SignalConnection connection in instance.tab_connections) {
@@ -893,7 +893,7 @@ class Instance : Object {
         Program program = Program.find_containing(filename, true);
 
         foreach (Gedit.Document document in Gedit.App.get_default().get_documents()) {
-            assert(documents_modified_state.contains(document));
+            assert(documents_modified_state.has_key(document));
             bool previously_modified = documents_modified_state.get(document);
             bool currently_modified = document.get_modified();
             documents_modified_state.set(document, currently_modified);
