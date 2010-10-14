@@ -1151,8 +1151,9 @@ public class Program : Object {
     string get_versioned_vapi_directory() {
         // Sort of a hack to get the path to the system vapi file directory. Gedit may hang or 
         // crash if the vala compiler .so is not present...
+        string[] null_dirs = {};
         Vala.CodeContext context = new Vala.CodeContext();
-        string path = context.get_vapi_path("gobject-2.0");
+        string path = context.get_package_path("gobject-2.0", null_dirs);
         return Path.get_dirname(path);
     }
 

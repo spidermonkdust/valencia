@@ -51,10 +51,10 @@ bool dir_has_parent(string dir, string parent) {
 }
 
 int compare_string(void *a, void *b) {
-    string *a_string = a;
-    string *b_string = b;
+    char **a_string = a;
+    char **b_string = b;
     
-    return strcmp(a_string, b_string);
+    return strcmp(*a_string, *b_string);
 }
 
 string? filename_to_uri(string filename) {
