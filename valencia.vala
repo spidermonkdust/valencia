@@ -1524,6 +1524,7 @@ void on_clean() {
     void on_project_menu_activated() {
         bool active_file_not_null = active_filename() != null;
         build_menu_item.set_sensitive(active_file_not_null);
+        clean_menu_item.set_sensitive(active_file_not_null);
 
         // Make sure the program for the file exists first, otherwise disable the run button        
         if (active_file_not_null && program_exists_for_active_document()) {
