@@ -34,6 +34,7 @@ all: valencia.gedit-plugin libvalencia.so
 	
 
 valencia.gedit-plugin: valencia.gedit-plugin.m4 Makefile
+	@ type m4 > /dev/null || ( echo 'm4 is missing and is required to build Valencia. ' ; exit 1 )
 	m4 -DVERSION='$(VERSION)' valencia.gedit-plugin.m4 > valencia.gedit-plugin
 
 libvalencia.so: $(SOURCES) Makefile
