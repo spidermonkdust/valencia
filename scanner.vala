@@ -300,8 +300,8 @@ class Scanner : Object {
 
     // Return the source text of the last token retrieved.
     public string val() {
-        size_t bytes = (char *) end_char - (char *) start_char;
-        return start_char.ndup(bytes);
+        long bytes = (long) ((char *) end_char - (char *) start_char);
+        return start_char.substring(0, bytes);
     }
 
     public unowned string get_start() {

@@ -300,7 +300,8 @@ public class Parser : Object {
         } while (t != Token.LEFT_BRACE && t != Token.SEMICOLON);
 
         // Take the string from the return type all the way to the last ')'
-        m.update_prototype(input.ndup((char *) scanner.get_start() - (char *) input));
+        long n = (long) ((char *) scanner.get_start() - (char *) input);
+        m.update_prototype(input.substring(0, n));
         
         if (t == Token.LEFT_BRACE)
             m.body = parse_block();

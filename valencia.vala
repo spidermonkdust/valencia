@@ -834,13 +834,13 @@ class Instance : Object {
     }
 
     void jump_to_document_error(Gtk.TextIter iter, ErrorInfo info, Program program) {
-        int line_number = info.start_line.to_int();
+        int line_number = int.parse(info.start_line);
         Destination dest;
         if (info.start_char == null)
             dest = new LineNumber(line_number - 1);
         else
-            dest = new LineCharRange(line_number - 1, info.start_char.to_int() - 1,
-                                     info.end_line.to_int() - 1, info.end_char.to_int());
+            dest = new LineCharRange(line_number - 1, int.parse(info.start_char) - 1,
+                                     int.parse(info.end_line) - 1, int.parse(info.end_char));
 
         if (Path.is_absolute(info.filename)) {
             jump(info.filename, dest);
@@ -1111,7 +1111,7 @@ class Instance : Object {
             if (einfo != null) {
                 Gedit.Document document = window.get_active_document();
                 Gtk.TextIter document_iter;
-                document.get_iter_at_line(out document_iter, einfo.start_line.to_int());
+                document.get_iter_at_line(out document_iter, int.parse(einfo.start_line));
               
                 Gtk.TextMark doc_mark = document.create_mark(null, document_iter, false);
                 Gtk.TextMark build_mark = output_buffer.create_mark(null, iter, false);
@@ -1275,27 +1275,24 @@ class Instance : Object {
 //                   Status bar update                    //
 ////////////////////////////////////////////////////////////
 
+    // If the range (old_cursor_offset, new_cursor_offset) contains a brace character
+    // then update old_cursor_offset and return true.
+    //
+    // We don't want to allocate memory here since this code runs every time the
+    // cursor moves.
     bool cursor_moved_outside_old_scope(string buffer, int new_cursor_offset) {
-        int begin_offset;
-        int length;
-
-        if (new_cursor_offset < old_cursor_offset) {
-            begin_offset = new_cursor_offset;
-            length = old_cursor_offset - new_cursor_offset;
-        } else {
-            begin_offset = old_cursor_offset;
-            length = new_cursor_offset - old_cursor_offset;
-        }
+        int old = int.min(old_cursor_offset, buffer.char_count());     // in case buffer has shrunk
         
-        weak string begin_string = buffer.offset(begin_offset);
-
-        for (int i = 0; i < length; ++i) {
-            unichar c = begin_string.get_char();
+        long s = buffer.index_of_nth_char(int.min(old, new_cursor_offset));
+        long end = buffer.index_of_nth_char(int.max(old, new_cursor_offset));
+        
+        while (s < end) {
+            unichar c = buffer.get_char(s);
             if (c == '{' || c == '}') {
                 old_cursor_offset = new_cursor_offset;
                 return true;
             }
-            begin_string = begin_string.next_char();
+            s = next_utf8_char(buffer, s);
         }
         
         return false;

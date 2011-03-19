@@ -68,6 +68,8 @@ class AutocompleteDialog : Object {
     }
     
     string strip_completed_classnames(string list_name, string completion_target) {
+        string result = list_name;
+        
         string[] classnames = completion_target.split(".");
         int names = classnames.length;
         // If the last classname is not explicitly part of the class qualification, then it 
@@ -80,16 +82,16 @@ class AutocompleteDialog : Object {
 
             // If the name doesn't contain the current classname, it may be a namespace name that
             // isn't part of the list_name string - we shouldn't stop the comparison early
-            if (list_name.contains(name)) {
+            if (result.contains(name)) {
                 // Add one to the offset of a string to account for the "."
                 long offset = name.length;
                 if (offset > 0)
                     ++offset;
-                list_name = list_name.offset(offset);
+                result = result.substring(offset);
             }
         }
 
-        return list_name;
+        return result;
     }
 
     string parse_single_symbol(Symbol symbol, string? completion_target, bool constructor) {

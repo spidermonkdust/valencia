@@ -8,6 +8,15 @@ using Gee;
 
 extern void qsort(void *p, size_t num, size_t size, GLib.CompareFunc func);
 
+//// string functions ////
+
+// Return the index of the next UTF-8 character after the character at index i.
+public long next_utf8_char(string s, long i) {
+    char *p = (char *) s + i;
+    unowned string t = ((string) p).next_char();
+    return (long) ((char *) t - (char *) s);
+}
+
 //// Helper data structures ////
 
 class Stack<G> : GLib.Object {
@@ -54,7 +63,7 @@ int compare_string(void *a, void *b) {
     char **a_string = a;
     char **b_string = b;
     
-    return strcmp(*a_string, *b_string);
+    return strcmp((string) (*a_string), (string) (*b_string));
 }
 
 string? filename_to_uri(string filename) {
