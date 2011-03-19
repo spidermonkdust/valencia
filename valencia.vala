@@ -164,13 +164,13 @@ class Instance : Object {
     const Gtk.ActionEntry[] entries = {
         { "SearchGoToDefinition", null, "Go to _Definition", "F12",
           "Jump to a symbol's definition", on_go_to_definition },
-        { "SearchFindSymbol", Gtk.STOCK_FIND, "Find _Symbol...", "<ctrl><alt>s",
+        { "SearchFindSymbol", Gtk.Stock.FIND, "Find _Symbol...", "<ctrl><alt>s",
           "Search for a symbol by name", on_find_symbol },
         { "SearchGoToEnclosingMethod", null, "Go to _Outer Scope", "<ctrl>F12",
           "Jump to the enclosing method or class", on_go_to_outer_scope },
-        { "SearchGoBack", Gtk.STOCK_GO_BACK, "Go _Back", "<alt>Left",
+        { "SearchGoBack", Gtk.Stock.GO_BACK, "Go _Back", "<alt>Left",
           "Go back after jumping to a definition", on_go_back },
-        { "SearchGoForward", Gtk.STOCK_GO_FORWARD, "Go F_orward", "<alt>Right",
+        { "SearchGoForward", Gtk.Stock.GO_FORWARD, "Go F_orward", "<alt>Right",
           "Go forward to a definition after jumping backwards", on_go_forward },
         { "SearchNextError", null, "_Next Error", "<ctrl><alt>n",
           "Go to the next compiler error in the ouput and view panes", on_next_error },
@@ -181,13 +181,13 @@ class Instance : Object {
         
         { "Project", null, "_Project" },   // top-level menu
 
-        { "ProjectBuild", Gtk.STOCK_CONVERT, "_Build", "<ctrl><alt>b",
+        { "ProjectBuild", Gtk.Stock.CONVERT, "_Build", "<ctrl><alt>b",
           "Build the project", on_build },
-        { "ProjectClean", Gtk.STOCK_CLEAR, "_Clean", "<ctrl><alt>c",
+        { "ProjectClean", Gtk.Stock.CLEAR, "_Clean", "<ctrl><alt>c",
           "Clean build output", on_clean },
-        { "ProjectRun", Gtk.STOCK_EXECUTE, "_Run", "<ctrl><alt>r",
+        { "ProjectRun", Gtk.Stock.EXECUTE, "_Run", "<ctrl><alt>r",
           "Run the program", on_run },
-        { "ProjectSettings", Gtk.STOCK_PROPERTIES, "_Settings", "<ctrl><alt>t",
+        { "ProjectSettings", Gtk.Stock.PROPERTIES, "_Settings", "<ctrl><alt>t",
           "Customize the build and clean commands", on_project_settings }
     };
 
@@ -256,7 +256,7 @@ class Instance : Object {
         output_pane.show_all();
 
         Gedit.Panel panel = window.get_bottom_panel();
-        panel.add_item_with_stock_icon(output_pane, "Build", Gtk.STOCK_CONVERT);
+        panel.add_item_with_stock_icon(output_pane, "Build", Gtk.Stock.CONVERT);
 
         // Run pane
         run_terminal = new Vte.Terminal();
@@ -268,7 +268,7 @@ class Instance : Object {
         run_pane.add(run_terminal);
         run_pane.show_all();
         
-        panel.add_item_with_stock_icon(run_pane, "Run", Gtk.STOCK_EXECUTE);     
+        panel.add_item_with_stock_icon(run_pane, "Run", Gtk.Stock.EXECUTE);     
 
         // Symbol pane
         symbol_browser = new SymbolBrowser(this);

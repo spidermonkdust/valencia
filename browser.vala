@@ -35,7 +35,7 @@ class SymbolBrowser {
         symbol_vbox.show_all();
 
         weak Gedit.Panel panel = instance.window.get_side_panel();
-        panel.add_item_with_stock_icon(symbol_vbox, "Symbols", Gtk.STOCK_FIND);
+        panel.add_item_with_stock_icon(symbol_vbox, "Symbols", Gtk.Stock.FIND);
         
         panel.show.connect(on_panel_open);
         panel.hide.connect(on_panel_hide);

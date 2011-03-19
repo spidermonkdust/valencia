@@ -52,8 +52,8 @@ class ProjectSettingsDialog : Object {
 
         dialog = new Gtk.Dialog.with_buttons("Settings", parent_win, Gtk.DialogFlags.MODAL |
                                              Gtk.DialogFlags.DESTROY_WITH_PARENT, 
-                                             Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, 
-                                             Gtk.STOCK_OK, Gtk.ResponseType.OK, null);
+                                             Gtk.Stock.CANCEL, Gtk.ResponseType.CANCEL, 
+                                             Gtk.Stock.OK, Gtk.ResponseType.OK, null);
         dialog.set_default_response(Gtk.ResponseType.OK);
         dialog.set_default_size(350, 10);
         dialog.delete_event.connect(dialog.hide_on_delete);
