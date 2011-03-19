@@ -160,6 +160,8 @@ class Instance : Object {
     static HashMap<weak Gedit.Document, bool> documents_modified_state = 
         new HashMap<weak Gedit.Document, bool>();
 
+    Gedit.View view_to_scroll;
+
     // Menu item entries
     const Gtk.ActionEntry[] entries = {
         { "SearchGoToDefinition", null, "Go to _Definition", "F12",
@@ -717,25 +719,12 @@ class Instance : Object {
             build();
     }
 
-    void scroll_tab_to_iter(Gedit.Tab tab, Gtk.TextIter iter) {
-        Gedit.View view = tab.get_view();
-
-        Gtk.TextMark mark = iter.get_buffer().get_mark("valencia");
-        if (mark == null) {
-            mark = new Gtk.TextMark("valencia", false);
-            iter.get_buffer().add_mark(mark, iter);
-        } else {
-            iter.get_buffer().move_mark(mark, iter);
+    bool scroll_view_to_cursor() {
+        if (view_to_scroll != null) {
+            view_to_scroll.scroll_to_cursor();
+            view_to_scroll = null;
         }
-        // We don't use view.scroll_to_iter because, according to Devhelp
-        //   "Note that [scroll_to_iter] uses the currently-computed height of the
-        //   lines in the text buffer.  Line heights are computed in an idle
-        //   handler; so this function may not have the desired effect if it's called
-        //   before the height computations.  To avoid oddness, consider using
-        //   gtk_text_view_scroll_to_mark() which saves a point to be scrolled
-        //   to after line validation."
-        view.scroll_to_mark(mark, 0.2, false, 0.0, 0.0);
-        view.grab_focus();
+        return false;
     }
 
     void go(Gedit.Tab tab, Destination dest) {
@@ -744,7 +733,12 @@ class Instance : Object {
         Gtk.TextIter end;
         dest.get_range(document, out start, out end);
         document.select_range(start, end);
-        scroll_tab_to_iter(tab, start);
+
+        // We need to scroll to the selection in an idle handler.  If we don't, then when 
+        // a new document is being loaded sometimes the scrolling won't happen at all,
+        // especially if the document is long.  This was http://trac.yorba.org/ticket/1000 .
+        view_to_scroll = tab.get_view();
+        Idle.add(scroll_view_to_cursor);
     }
     
     void on_document_loaded(Gedit.Document document) {
