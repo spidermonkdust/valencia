@@ -1,4 +1,4 @@
-/* Copyright 2009-2010 Yorba Foundation
+/* Copyright 2009-2011 Yorba Foundation
  *
  * This software is licensed under the GNU Lesser General Public License
  * (version 2.1 or later).  See the COPYING file in this distribution. 
@@ -64,12 +64,6 @@ int compare_string(void *a, void *b) {
     char **b_string = b;
     
     return strcmp((string) (*a_string), (string) (*b_string));
-}
-
-string? filename_to_uri(string filename) {
-    try {
-        return Filename.to_uri(filename);
-    } catch (ConvertError e) { return null; }
 }
 
 void make_pipe(int fd, IOFunc func) throws IOChannelError {

@@ -1,4 +1,4 @@
-/* Copyright 2009-2010 Yorba Foundation
+/* Copyright 2009-2011 Yorba Foundation
  *
  * This software is licensed under the GNU LGPL (version 2.1 or later).
  * See the COPYING file in this distribution. 
@@ -58,9 +58,10 @@ class ProjectSettingsDialog : Object {
         dialog.set_default_size(350, 10);
         dialog.delete_event.connect(dialog.hide_on_delete);
 
-        dialog.vbox.pack_start(alignment_box, false, false, 0);
+        Gtk.Box content_area = (Gtk.Box) dialog.get_content_area();
+        content_area.pack_start(alignment_box, false, false, 0);
         // Make all children visible by default
-        dialog.vbox.show_all();
+        content_area.show_all();
     }
 
     void on_entry_activated() {
