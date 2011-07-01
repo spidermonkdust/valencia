@@ -421,67 +421,51 @@ class Instance : Object {
         bool handled = false; 
         
         // These will always catch, even with alt and ctrl modifiers
-        switch(Gdk.keyval_name(key.keyval)) {
-            case "Escape":
+        switch(key.keyval) {
+            case 0xff1b: // escape
                 if (instance.autocomplete.is_visible())
                     instance.autocomplete.hide();
                 else
                     instance.tip.hide();
                 handled = true;
                 break;
-            case "Up":
+            case 0xff52: // up arrow
                 if (instance.autocomplete.is_visible()) {
                     instance.autocomplete.select_previous();
                     handled = true;
                 }
                 break;
-            case "Down":
+            case 0xff54: // down arrow
                 if (instance.autocomplete.is_visible()) {
                     instance.autocomplete.select_next();
                     handled = true;
                 }
                 break;
-                
-            // We handle Alt+Left and Alt+Right explicitly to override GtkSourceView, which
-            // normally uses these as shortcuts for moving the selected word left or right.
-            case "Left":
-                if (key.state == Gdk.ModifierType.MOD1_MASK) {
-                    instance.on_go_back();
-                    handled = true;
-                }
-                break;
-            case "Right":
-                if (key.state == Gdk.ModifierType.MOD1_MASK) {
-                    instance.on_go_forward();
-                    handled = true;
-                }
-                break;
-                
-            case "Home":
+            case 0xff50: // home
                 if (instance.autocomplete.is_visible()) {
                     instance.autocomplete.select_first_cell();
                     handled = true;
                 }
                 break;
-            case "End":
+            case 0xff57: // end
                 if (instance.autocomplete.is_visible()) {
                     instance.autocomplete.select_last_cell();
                     handled = true;
                 }
                 break;
-            case "Page_Up":
+            case 0xff55: // page up
                 if (instance.autocomplete.is_visible()) {
                     instance.autocomplete.page_up();
                     handled = true;
                 }
                 break;
-            case "Page_Down":
+            case 0xff56: // page down
                 if (instance.autocomplete.is_visible()) {
                     instance.autocomplete.page_down();
                     handled = true;
                 }
                 break;
-            case "Return":
+            case 0xff0d: // return
                 if (instance.autocomplete.is_visible()) {
                     instance.autocomplete.select_item();
                     handled = true;
