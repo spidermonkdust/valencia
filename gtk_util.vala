@@ -528,5 +528,6 @@ Gedit.Tab? find_tab(string filename, out Gedit.Window window) {
             return tab;
         }
     }
+    window = null;
     return null;
 }

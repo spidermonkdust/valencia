@@ -124,7 +124,7 @@ public class Instance : Peas.ExtensionBase, Gedit.WindowActivatable {
     Gtk.ScrolledWindow output_pane;
     
     delegate bool ProcessFinished();
-    ProcessFinished on_process_finshed;
+    unowned ProcessFinished on_process_finshed;
 
     // Settings dialog
     ProjectSettingsDialog settings_dialog;
@@ -605,7 +605,7 @@ public class Instance : Peas.ExtensionBase, Gedit.WindowActivatable {
             appended = true;
         }
         if (appended)
-            idle_add(scroll_to_end);
+            Idle.add(scroll_to_end);
         return ret;
     }
     
