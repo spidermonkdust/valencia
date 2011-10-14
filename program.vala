@@ -1,4 +1,4 @@
-/* Copyright 2009-2010 Yorba Foundation
+/* Copyright 2009-2011 Yorba Foundation
  *
  * This software is licensed under the GNU Lesser General Public License
  * (version 2.1 or later).  See the COPYING file in this distribution. 
@@ -1088,7 +1088,7 @@ public class Program : Object {
             recursive_project = false;
         }
 
-        idle_add(parse_local_vala_files_idle_callback);
+        Idle.add(parse_local_vala_files_idle_callback);
         
         programs.add(this);
     }
@@ -1310,7 +1310,7 @@ public class Program : Object {
             parsing = true;
             parse_list_index = 0;
             sourcefile_paths.clear();
-            idle_add(this.parse_system_vala_files_idle_callback);
+            Idle.add(this.parse_system_vala_files_idle_callback);
         }
     }
     

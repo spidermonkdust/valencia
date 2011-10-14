@@ -1,4 +1,4 @@
-/* Copyright 2009-2010 Yorba Foundation
+/* Copyright 2009-2011 Yorba Foundation
  *
  * This software is licensed under the GNU Lesser General Public License
  * (version 2.1 or later).  See the COPYING file in this distribution. 
@@ -94,15 +94,13 @@ void get_coords_at_buffer_offset(Gedit.Window window, int offset, bool above, bo
     int win_x, win_y;
     active_view.buffer_to_window_coords(Gtk.TextWindowType.WIDGET, rect.x, rect.y, 
                                         out win_x, out win_y);
-    int widget_x = active_view.allocation.x;
-    int widget_y = active_view.allocation.y; 
     int orig_x, orig_y;
-    window.window.get_origin(out orig_x, out orig_y);
+    active_view.get_window(Gtk.TextWindowType.WIDGET).get_origin(out orig_x, out orig_y);
 
-    x = win_x + widget_x + orig_x;
-    y = win_y + widget_y + orig_y;
+    x = win_x + orig_x;
+    y = win_y + orig_y;
     x += beside ? rect.height : 0; 
-    y -= above ? rect.height : 0;
+    y -= above ? (rect.height + 3) : 0;
 }
 
 ////////////////////////////////////////////////////////////
@@ -159,7 +157,7 @@ class Tooltip {
         doc.delete_mark(method_mark);
         
         visible = false;
-        window.hide_all();
+        window.hide();
     }
     
     public bool is_visible() {
@@ -511,23 +509,25 @@ class ListViewString : Object {
 //// Gedit helper functions ////
 
 string? document_filename(Gedit.Document document) {
-    string uri = document.get_uri();
-    if (uri == null)
+    File location = document.get_location();
+    if (location == null)
         return null;
+        
     try {
-        return Filename.from_uri(uri);
+        return Filename.from_uri(location.get_uri());
     } catch (ConvertError e) { return null; }
 }
 
 Gedit.Tab? find_tab(string filename, out Gedit.Window window) {
-    string uri = filename_to_uri(filename);
+    File location = File.new_for_path(filename);
     
     foreach (Gedit.Window w in Gedit.App.get_default().get_windows()) {
-        Gedit.Tab tab = w.get_tab_from_uri(uri);
+        Gedit.Tab tab = w.get_tab_from_location(location);
         if (tab != null) {
             window = w;
             return tab;
         }
     }
+    window = null;
     return null;
 }

@@ -1,4 +1,4 @@
-/* Copyright 2009-2010 Yorba Foundation
+/* Copyright 2009-2011 Yorba Foundation
  *
  * This software is licensed under the GNU Lesser General Public License
  * (version 2.1 or later).  See the COPYING file in this distribution. 
@@ -8,7 +8,7 @@ using Gee;
 using Vte;
 using Valencia;
 
-abstract class Destination : Object {
+public abstract class Destination : Object {
     public abstract void get_range(Gtk.TextBuffer buffer,
                                    out Gtk.TextIter start, out Gtk.TextIter end);
 }
@@ -72,17 +72,24 @@ class ScanInfo : Object {
         this.parse_info = parse_info;
         cursor_pos = cursor_position;
     }
-    
+     
     public ScanInfo.empty() { }
     
     public Expression inner() { return parse_info.inner; }
     
     public Expression outer() { return parse_info.outer; }
 }
+  
+public class Instance : Peas.ExtensionBase, Gedit.WindowActivatable {
+    static Gee.ArrayList<Instance> instances = new Gee.ArrayList<Instance>();
 
-class Instance : Object {
-    public Gedit.Window window;
-    Plugin plugin;
+	Gedit.Window _window;
+
+	public Gedit.Window window {
+	    construct { _window = value; }
+	    owned get { return _window; }
+	}
+    
     Program last_program_to_build;
 
     Gtk.ActionGroup action_group;
@@ -117,7 +124,7 @@ class Instance : Object {
     Gtk.ScrolledWindow output_pane;
     
     delegate bool ProcessFinished();
-    ProcessFinished on_process_finshed;
+    unowned ProcessFinished on_process_finshed;
 
     // Settings dialog
     ProjectSettingsDialog settings_dialog;
@@ -161,7 +168,7 @@ class Instance : Object {
         new HashMap<weak Gedit.Document, bool>();
 
     Gedit.View view_to_scroll;
-
+   
     // Menu item entries
     const Gtk.ActionEntry[] entries = {
         { "SearchGoToDefinition", null, "Go to _Definition", "F12",
@@ -174,7 +181,7 @@ class Instance : Object {
           "Go back after jumping to a definition", on_go_back },
         { "SearchGoForward", Gtk.Stock.GO_FORWARD, "Go F_orward", "<alt>Right",
           "Go forward to a definition after jumping backwards", on_go_forward },
-        { "SearchNextError", null, "_Next Error", "<ctrl><alt>n",
+        { "SearchNextError", null, "_Next Error", "<ctrl><alt>e",
           "Go to the next compiler error in the ouput and view panes", on_next_error },
         { "SearchPrevError", null, "_Previous Error", "<ctrl><alt>p",
           "Go to the previous compiler error in the ouput and view panes", on_prev_error },
@@ -222,9 +229,12 @@ class Instance : Object {
         </ui>
     """;    
 
-    public Instance(Gedit.Window window, Plugin plugin) {
-        this.window = window;
-        this.plugin = plugin;
+    public Instance() {
+        Object();
+    }
+    
+    public void activate() {
+        instances.add(this);
 
         if (history == null)
             history = new ArrayList<Gtk.TextMark>();
@@ -258,7 +268,7 @@ class Instance : Object {
         output_pane.show_all();
 
         Gedit.Panel panel = window.get_bottom_panel();
-        panel.add_item_with_stock_icon(output_pane, "Build", Gtk.Stock.CONVERT);
+        panel.add_item_with_stock_icon(output_pane, "build", "Build", Gtk.Stock.CONVERT);
 
         // Run pane
         run_terminal = new Vte.Terminal();
@@ -270,7 +280,7 @@ class Instance : Object {
         run_pane.add(run_terminal);
         run_pane.show_all();
         
-        panel.add_item_with_stock_icon(run_pane, "Run", Gtk.Stock.EXECUTE);     
+        panel.add_item_with_stock_icon(run_pane, "run", "Run", Gtk.Stock.EXECUTE);     
 
         // Symbol pane
         symbol_browser = new SymbolBrowser(this);
@@ -308,10 +318,13 @@ class Instance : Object {
         }
     }
 
-    ~Instance() {
-        SignalHandler.disconnect(window, symbol_browser_connect_id);
+    public static Instance? find(Gedit.Window window) {
+        foreach (Instance i in instances)
+            if (i.window == window)
+                return i;
+        return null;
     }
-
+    
     void initialize_menu_items(Gtk.UIManager manager) {
         Gtk.MenuItem search_menu = get_menu_item(manager, "/MenuBar/SearchMenu");
         search_menu.activate.connect(on_search_menu_activated);
@@ -421,51 +434,67 @@ class Instance : Object {
         bool handled = false; 
         
         // These will always catch, even with alt and ctrl modifiers
-        switch(key.keyval) {
-            case 0xff1b: // escape
+        switch(Gdk.keyval_name(key.keyval)) {
+            case "Escape":
                 if (instance.autocomplete.is_visible())
                     instance.autocomplete.hide();
                 else
                     instance.tip.hide();
                 handled = true;
                 break;
-            case 0xff52: // up arrow
+            case "Up":
                 if (instance.autocomplete.is_visible()) {
                     instance.autocomplete.select_previous();
                     handled = true;
                 }
                 break;
-            case 0xff54: // down arrow
+            case "Down":
                 if (instance.autocomplete.is_visible()) {
                     instance.autocomplete.select_next();
                     handled = true;
                 }
                 break;
-            case 0xff50: // home
+                
+            // We handle Alt+Left and Alt+Right explicitly to override GtkSourceView, which
+            // normally uses these as shortcuts for moving the selected word left or right.
+            case "Left":
+                if (key.state == Gdk.ModifierType.MOD1_MASK) {
+                    instance.on_go_back();
+                    handled = true;
+                }
+                break;
+            case "Right":
+                if (key.state == Gdk.ModifierType.MOD1_MASK) {
+                    instance.on_go_forward();
+                    handled = true;
+                }
+                break;
+                
+            case "Home":
                 if (instance.autocomplete.is_visible()) {
                     instance.autocomplete.select_first_cell();
                     handled = true;
                 }
                 break;
-            case 0xff57: // end
+            case "End":
                 if (instance.autocomplete.is_visible()) {
                     instance.autocomplete.select_last_cell();
                     handled = true;
                 }
                 break;
-            case 0xff55: // page up
+            case "Page_Up":
                 if (instance.autocomplete.is_visible()) {
                     instance.autocomplete.page_up();
                     handled = true;
                 }
                 break;
-            case 0xff56: // page down
+            case "Page_Down":
                 if (instance.autocomplete.is_visible()) {
                     instance.autocomplete.page_down();
                     handled = true;
                 }
                 break;
-            case 0xff0d: // return
+            case "Return":
                 if (instance.autocomplete.is_visible()) {
                     instance.autocomplete.select_item();
                     handled = true;
@@ -576,7 +605,7 @@ class Instance : Object {
             appended = true;
         }
         if (appended)
-            idle_add(scroll_to_end);
+            Idle.add(scroll_to_end);
         return ret;
     }
     
@@ -597,7 +626,7 @@ class Instance : Object {
     }
   
     void hide_old_build_output() {
-        foreach (Instance instance in plugin.instances) {
+        foreach (Instance instance in instances) {
             if (instance != this && last_program_to_build == instance.last_program_to_build) {
                 instance.output_pane.hide();
                 instance.last_program_to_build = null;
@@ -764,7 +793,8 @@ class Instance : Object {
             return;
         }
         
-        tab = window.create_tab_from_uri(filename_to_uri(filename), null, 0, false, true);
+        Gedit.Encoding encoding = null;
+        tab = window.create_tab_from_location(File.new_for_path(filename), encoding, 0, 0, false, true);
         target_filename = filename;
         destination = dest;
         Signal.connect(tab.get_document(), "loaded", (Callback) document_loaded_callback, this);
@@ -1119,7 +1149,7 @@ class Instance : Object {
     }
 
     Instance? find_build_instance(string cur_top_directory) {
-        foreach (Instance inst in plugin.instances) {
+        foreach (Instance inst in instances) {
             if (inst.last_program_to_build != null && 
                 inst.last_program_to_build.get_top_directory() == cur_top_directory) {
                     return inst;
@@ -1224,8 +1254,16 @@ class Instance : Object {
 
         string[] args = { binary_path };
         
-        int pid = run_terminal.fork_command(binary_path, args, null, Path.get_dirname(binary_path),
-                                            false, false, false);
+        int pid;
+        bool ok;
+        try {
+            ok = run_terminal.fork_command_full(
+                0, Path.get_dirname(binary_path), args, null, 0, null, out pid);
+        } catch (Error e) { ok = false; }
+        if (!ok) {
+            show_error_dialog("can't fork command");
+            return;
+        }
 
         if (pid == -1) {
             show_error_dialog("There was a problem running \"" + binary_path + "\"");
@@ -1532,6 +1570,9 @@ void on_clean() {
         settings_menu_item.set_sensitive(active_file_not_null);
     }
 
+    public void update_state() {
+    }
+
     public void deactivate() {
         Gtk.UIManager manager = window.get_ui_manager();
         manager.remove_ui(ui_id);
@@ -1539,38 +1580,14 @@ void on_clean() {
 
         Gedit.Panel panel = window.get_bottom_panel();
         panel.remove_item(output_pane);
+
+        SignalHandler.disconnect(window, symbol_browser_connect_id);
+        instances.remove(this);
     }
 }
-
-class Plugin : Gedit.Plugin {
-    public Gee.ArrayList<Instance> instances = new Gee.ArrayList<Instance>();
-
-    Plugin() {
-        Object();
-    }
-
-    public override void activate(Gedit.Window window) {
-        Instance new_instance = new Instance(window, this);
-        instances.add(new_instance);
-    }
-    
-    Instance? find(Gedit.Window window) {
-        foreach (Instance i in instances)
-            if (i.window == window)
-                return i;
-        return null;
-    }
-    
-    public override void deactivate(Gedit.Window window) {
-        Instance i = find(window);
-        i.deactivate();
-        instances.remove(i);
-    }
-}
-
 
 [ModuleInit]
-public Type register_gedit_plugin (TypeModule module) {
-    return typeof (Plugin);
+public void peas_register_types (TypeModule module) {
+	var o = module as Peas.ObjectModule;
+ 	o.register_extension_type(typeof(Gedit.WindowActivatable), typeof(Instance));
 }
-

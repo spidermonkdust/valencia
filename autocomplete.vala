@@ -1,4 +1,4 @@
-/* Copyright 2009-2010 Yorba Foundation
+/* Copyright 2009-2011 Yorba Foundation
  *
  * This software is licensed under the GNU Lesser General Public License
  * (version 2.1 or later).  See the COPYING file in this distribution. 
@@ -32,20 +32,6 @@ class AutocompleteDialog : Object {
       
         window.show_all();
         window.hide();
-
-        Signal.connect(window, "expose-event", (Callback) draw_callback, this);
-    }
-
-    static bool draw_callback(Gtk.Window window, Gdk.EventExpose event, AutocompleteDialog dialog) {
-        Gtk.paint_flat_box(dialog.window.style, dialog.window.window, 
-                           Gtk.StateType.NORMAL, Gtk.ShadowType.OUT, 
-                           null, dialog.window, "tooltip",
-                           dialog.window.allocation.x, dialog.window.allocation.y,
-                           dialog.window.allocation.width, dialog.window.allocation.height);
-
-        dialog.list.scrolled_window.expose_event(event);
-
-        return true;
     }
 
     unowned string? get_completion_target(Gtk.TextBuffer buffer) {
