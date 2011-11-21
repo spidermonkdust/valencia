@@ -100,14 +100,15 @@ public class Parser : Object {
         while (!scanner.eof()) {
             switch (peek_token()) {
                 case Token.COMMA:
-                case Token.RIGHT_BRACE:
                 case Token.SEMICOLON:
                     if (depth == 0)
                         return;
                     break;
+                case Token.LEFT_BRACE:
                 case Token.LEFT_PAREN:
                     ++depth;
                     break;
+                case Token.RIGHT_BRACE:
                 case Token.RIGHT_PAREN:
                     if (depth == 0)
                         return;
