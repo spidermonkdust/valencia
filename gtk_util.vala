@@ -29,7 +29,7 @@ void append_with_tag(Gtk.TextBuffer buffer, string text, Gtk.TextTag? tag) {
     if (tag != null)
         buffer.insert_with_tags(end, text, -1, tag);
     else
-        buffer.insert(end, text, -1);
+        buffer.insert(ref end, text, -1);
 }
 
 void append(Gtk.TextBuffer buffer, string text) {

@@ -247,7 +247,7 @@ class AutocompleteDialog : Object {
         // Text insertion/deletion signals have been linked to updating the autocomplete dialog -
         // we don't want to do that if we're already inserting text.
         inserting_text = true;
-        buffer.delete(start, end);
+        buffer.delete(ref start, ref end);
 
         long offset = selection.has_suffix(")") ? 1 : 0;
         buffer.insert_at_cursor(selection, (int) (selection.length - offset));
