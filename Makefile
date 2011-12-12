@@ -9,21 +9,21 @@ SOURCES = autocomplete.vala browser.vala expression.vala gtk_util.vala parser.va
           scanner.vala settings.vala util.vala valencia.vala
  
 PACKAGES = --pkg gedit --pkg gee-1.0 --pkg gtk+-3.0 --pkg gtksourceview-3.0 \
-           --pkg libvala-0.14 --pkg PeasGtk-1.0 --pkg vte-2.90
+           --pkg libpeas-1.0 --pkg libvala-0.14 --pkg vte-2.90
 
 PACKAGE_VERSIONS = \
     gedit >= 2.91.0 \
     gee-1.0 >= 0.1.3 \
     gtksourceview-3.0 >= 3.0.0 \
     gtk+-3.0 >= 3.0.0 \
-    libvala-0.14 >= 0.14.0 \
+    libvala-0.14 >= 0.14.1 \
     vte-2.90 >= 0.27.90
 
 OUTPUTS = libvalencia.so valencia.plugin
 
 DIST_FILES = $(SOURCES) \
              Makefile \
-             gedit-2.20.deps gedit-2.20.vapi valencia.png \
+             valencia.png \
              valencia.plugin valencia.plugin.m4 \
              AUTHORS COPYING INSTALL NEWS README THANKS
 DIST_TAR = $(PLUGIN)-$(VERSION).tar
@@ -40,7 +40,7 @@ valencia.plugin: valencia.plugin.m4 Makefile
 
 libvalencia.so: $(SOURCES) Makefile
 	@ pkg-config --print-errors --exists '$(PACKAGE_VERSIONS)'
-	$(VALAC) $(VFLAGS) -X --shared -X -fPIC --vapidir=vapi $(PACKAGES) $(SOURCES) -o $@
+	$(VALAC) $(VFLAGS) -X --shared -X -fPIC $(PACKAGES) $(SOURCES) -o $@
 
 install: libvalencia.so valencia.plugin
 	@ [ `whoami` != "root" ] || ( echo 'Run make install as yourself, not as root.' ; exit 1 )

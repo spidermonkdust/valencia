@@ -742,7 +742,7 @@ public class Instance : Peas.ExtensionBase, Gedit.WindowActivatable {
             if (!d.is_untitled() && d.get_modified()) {
                 ++saving;
                 Signal.connect(d, "saved", (Callback) saved_callback, this);
-                d.save(0);
+                d.do_save(0);
             }
         if (saving == 0)
             build();
