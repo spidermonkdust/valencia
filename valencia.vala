@@ -1280,7 +1280,7 @@ public class Instance : Peas.ExtensionBase, Gedit.WindowActivatable {
     }
 
     void on_run_child_exit() {
-        run_terminal.feed("\r\nThe program exited.\r\n", -1);
+        run_terminal.feed("\r\nThe program exited.\r\n".data);
         child_process_running = false;
     }
 

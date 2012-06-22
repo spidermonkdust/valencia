@@ -16,7 +16,7 @@ PACKAGE_VERSIONS = \
     gee-1.0 >= 0.1.3 \
     gtksourceview-3.0 >= 3.0.0 \
     gtk+-3.0 >= 3.0.0 \
-    libvala-0.18 >= 0.17.0 \
+    libvala-0.18 >= 0.17.1 \
     vte-2.90 >= 0.27.90
 
 OUTPUTS = libvalencia.so valencia.plugin
