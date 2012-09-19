@@ -259,7 +259,7 @@ public class Instance : Peas.ExtensionBase, Gedit.WindowActivatable {
         output_view.set_editable(false);
         output_view.set_cursor_visible(false);
         Pango.FontDescription font = Pango.FontDescription.from_string("Monospace");
-        output_view.modify_font(font);
+        output_view.override_font(font);
         output_view.button_press_event.connect(on_button_press);
 
         output_pane = new Gtk.ScrolledWindow(null, null);

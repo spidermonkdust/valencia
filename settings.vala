@@ -22,6 +22,7 @@ class ProjectSettingsDialog : Object {
         Gtk.Label build_command_label = new Gtk.Label("Build command:");
         build_entry = new Gtk.Entry();
         build_entry.activate.connect(on_entry_activated);
+        build_entry.hexpand = true;
         
         Gtk.Alignment align_build_label = new Gtk.Alignment(0.0f, 0.5f, 0.0f, 0.0f);
         align_build_label.add(build_command_label);
@@ -29,26 +30,23 @@ class ProjectSettingsDialog : Object {
         Gtk.Label clean_command_label = new Gtk.Label("Clean command:");
         clean_entry = new Gtk.Entry();
         clean_entry.activate.connect(on_entry_activated);
+        clean_entry.hexpand = true;
         
         Gtk.Alignment align_clean_label = new Gtk.Alignment(0.0f, 0.5f, 0.0f, 0.0f);
         align_clean_label.add(clean_command_label);
 
-        Gtk.Table table = new Gtk.Table(2, 2, false);
-        table.set_col_spacings(12);
-        table.set_row_spacings(6);
+        Gtk.Grid grid = new Gtk.Grid();
+        grid.set_column_spacing(12);
+        grid.set_row_spacing(6);
         
-        table.attach(align_build_label, 0, 1, 0, 1, 
-                     Gtk.AttachOptions.FILL, Gtk.AttachOptions.FILL, 0, 0);
-        table.attach(align_clean_label, 0, 1, 1, 2, 
-                     Gtk.AttachOptions.FILL, Gtk.AttachOptions.FILL, 0, 0);
-        table.attach(build_entry, 1, 2, 0, 1, Gtk.AttachOptions.FILL | Gtk.AttachOptions.EXPAND, 
-                     Gtk.AttachOptions.FILL, 0, 0);
-        table.attach(clean_entry, 1, 2, 1, 2, Gtk.AttachOptions.FILL | Gtk.AttachOptions.EXPAND, 
-                     Gtk.AttachOptions.FILL, 0, 0);
+        grid.attach(align_build_label, 0, 0, 1, 1);
+        grid.attach(align_clean_label, 0, 1, 1, 1);
+        grid.attach(build_entry, 1, 0, 1, 1);
+        grid.attach(clean_entry, 1, 1, 1, 1);
                      
         Gtk.Alignment alignment_box = new Gtk.Alignment(0.5f, 0.5f, 1.0f, 1.0f);
         alignment_box.set_padding(5, 6, 6, 5);
-        alignment_box.add(table);
+        alignment_box.add(grid);
 
         dialog = new Gtk.Dialog.with_buttons("Settings", parent_win, Gtk.DialogFlags.MODAL |
                                              Gtk.DialogFlags.DESTROY_WITH_PARENT, 

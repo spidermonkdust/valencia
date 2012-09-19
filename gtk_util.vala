@@ -126,9 +126,10 @@ class Tooltip {
         window.set_transient_for(parent);
         window.set_destroy_with_parent(true);
         
-        Gdk.Color background;
-        Gdk.Color.parse("#FFFF99", out background);
-        window.modify_bg(Gtk.StateType.NORMAL, background);
+        Gdk.RGBA background = Gdk.RGBA();
+        if (!background.parse("#FFFF99"))
+            error("can't parse color");
+        window.override_background_color(Gtk.StateFlags.NORMAL, background);
     }
 
     public void show(string qualified_method_name, string prototype, int method_pos) {
@@ -190,15 +191,14 @@ class ProgressBarDialog : Gtk.Window {
 
     public ProgressBarDialog(Gtk.Window parent_win, string text) {
         bar = new Gtk.ProgressBar();
-        Gtk.VBox vbox = new Gtk.VBox(true, 0);
-        Gtk.HBox hbox = new Gtk.HBox(true, 0);
+        Gtk.Box vbox = new Gtk.Box(Gtk.Orientation.VERTICAL, 0);
+        Gtk.Box hbox = new Gtk.Box(Gtk.Orientation.HORIZONTAL, 0);
 
-        bar.set_text(text);
         bar.set_size_request(226, 25);
         set_size_request(250, 49);
 
         vbox.pack_start(bar, true, false, 0);
-        hbox.pack_start(vbox, true, false, 0);   
+        hbox.pack_start(vbox, true, false, 0);
         add(hbox);
         set_title(text);
 

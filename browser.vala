@@ -12,7 +12,7 @@ class SymbolBrowser {
 
     Gtk.Entry find_entry;
     ListViewString list;
-    Gtk.VBox symbol_vbox;
+    Gtk.Box symbol_vbox;
     
     bool visible;
 
@@ -29,7 +29,7 @@ class SymbolBrowser {
         list.row_activated.connect(on_list_activated);
         list.received_focus.connect(on_list_receive_focus);
 
-        symbol_vbox = new Gtk.VBox(false, 6);
+        symbol_vbox = new Gtk.Box(Gtk.Orientation.VERTICAL, 6);
         symbol_vbox.pack_start(find_entry, false, false, 0);
         symbol_vbox.pack_start(list.scrolled_window, true, true, 0);
         symbol_vbox.show_all();
