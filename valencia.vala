@@ -286,6 +286,7 @@ public class Instance : Peas.ExtensionBase, Gedit.WindowActivatable {
         symbol_browser = new SymbolBrowser(this);
         symbol_browser_connect_id = Signal.connect(window, "active-tab-changed", 
             (Callback) SymbolBrowser.on_active_tab_changed, symbol_browser);
+        symbol_browser.activate();
 
         // Enclosing class in statusbar
         old_cursor_offset = 0;
@@ -1580,7 +1581,10 @@ void on_clean() {
 
         Gedit.Panel panel = window.get_bottom_panel();
         panel.remove_item(output_pane);
-
+        panel.remove_item(run_pane);
+        
+        symbol_browser.deactivate();
+        
         SignalHandler.disconnect(window, symbol_browser_connect_id);
         instances.remove(this);
     }

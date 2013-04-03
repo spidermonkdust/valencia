@@ -32,15 +32,21 @@ class SymbolBrowser : Object {
         symbol_vbox = new Gtk.Box(Gtk.Orientation.VERTICAL, 6);
         symbol_vbox.pack_start(find_entry, false, false, 0);
         symbol_vbox.pack_start(list.scrolled_window, true, true, 0);
-        symbol_vbox.show_all();
-
+    }
+    
+    public void activate() {
         weak Gedit.Panel panel = instance.window.get_side_panel();
         panel.add_item_with_stock_icon(symbol_vbox, "symbols", "Symbols", Gtk.Stock.FIND);
+        symbol_vbox.show_all();
         
         panel.show.connect(on_panel_open);
         panel.hide.connect(on_panel_hide);
     }
-
+    
+    public void deactivate() {
+        instance.window.get_side_panel().remove_item(symbol_vbox);
+    }
+    
     void on_text_changed() {
         on_update_symbols();
     }
