@@ -68,7 +68,7 @@ public class CompoundExpression : Expression {
     }
 }
 
-class ExpressionParser {
+class ExpressionParser : Object {
     Scanner scanner;
     int pos;
     bool partial;

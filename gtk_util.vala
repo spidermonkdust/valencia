@@ -107,7 +107,7 @@ void get_coords_at_buffer_offset(Gedit.Window window, int offset, bool above, bo
 //                        Classes                         //
 ////////////////////////////////////////////////////////////
 
-class Tooltip {
+class Tooltip : Object {
     weak Gedit.Window parent;
     Gtk.Window window;
     Gtk.Label tip_text;
@@ -219,7 +219,7 @@ class ProgressBarDialog : Gtk.Window {
 }
 
 class SignalConnection : Object {
-    public class SignalIDPair {
+    public class SignalIDPair : Object {
         public weak Object object;
         public ulong id;
         

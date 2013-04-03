@@ -7,7 +7,7 @@
 using Gee;
 using Valencia;
 
-class SymbolBrowser {
+class SymbolBrowser : Object {
     weak Instance instance;
 
     Gtk.Entry find_entry;
