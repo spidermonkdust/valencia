@@ -27,8 +27,7 @@ DIST_FILES = $(SOURCES) \
              valencia.plugin valencia.plugin.m4 \
              AUTHORS COPYING INSTALL NEWS README THANKS
 DIST_TAR = $(PLUGIN)-$(VERSION).tar
-DIST_TAR_BZ2 = $(DIST_TAR).bz2
-DIST_TAR_GZ = $(DIST_TAR).gz
+DIST_TAR_XZ = $(DIST_TAR).xz
 
 ICON_DIR = ~/.local/share/icons/hicolor/128x128/apps
 
@@ -59,8 +58,7 @@ parser:  expression.vala parser.vala program.vala scanner.vala util.vala
 dist: $(DIST_FILES)
 	mkdir -p $(PLUGIN)-$(VERSION)
 	cp --parents $(DIST_FILES) $(PLUGIN)-$(VERSION)
-	tar --bzip2 -cvf $(DIST_TAR_BZ2) $(PLUGIN)-$(VERSION)
-	tar --gzip -cvf $(DIST_TAR_GZ) $(PLUGIN)-$(VERSION)
+	tar --xz -cvf $(DIST_TAR_XZ) $(PLUGIN)-$(VERSION)
 	rm -rf $(PLUGIN)-$(VERSION)
 
 clean:
