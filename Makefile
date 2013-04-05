@@ -1,7 +1,7 @@
 PLUGIN = valencia
 
 # The version number appears here and also in valencia.plugin.
-VERSION = 0.3.0+trunk
+VERSION = 0.4.0
 
 VALAC = valac
 VALAC_VERSION := `$(VALAC) --version | awk '{print $$2}'`
@@ -28,6 +28,7 @@ DIST_FILES = $(SOURCES) \
              Makefile \
              valencia.png \
              valencia.plugin valencia.plugin.m4 \
+             chkver \
              AUTHORS COPYING INSTALL NEWS README THANKS
 DIST_TAR = $(PLUGIN)-$(VERSION).tar
 DIST_TAR_XZ = $(DIST_TAR).xz
