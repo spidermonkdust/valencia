@@ -1,7 +1,7 @@
 PLUGIN = valencia
 
 # The version number appears here and also in valencia.plugin.
-VERSION = 0.4.0
+VERSION = 0.4.0+trunk
 
 VALAC = valac
 VALAC_VERSION := `$(VALAC) --version | awk '{print $$2}'`
