@@ -4,6 +4,9 @@ PLUGIN = valencia
 VERSION = 0.3.0+trunk
 
 VALAC = valac
+VALAC_VERSION := `$(VALAC) --version | awk '{print $$2}'`
+MIN_VALAC_VERSION := 0.17.1
+MAX_VALAC_VERSION := 0.19.0
 
 SOURCES = autocomplete.vala browser.vala expression.vala gtk_util.vala parser.vala program.vala \
           scanner.vala settings.vala util.vala valencia.vala
@@ -31,7 +34,14 @@ DIST_TAR_XZ = $(DIST_TAR).xz
 
 ICON_DIR = ~/.local/share/icons/hicolor/128x128/apps
 
-all: valencia.plugin libvalencia.so
+all: valacheck valencia.plugin libvalencia.so
+
+.PHONY: valacheck
+valacheck:
+	@ $(VALAC) --version >/dev/null 2>/dev/null || ( echo 'Valencia requires Vala compiler $(MIN_VALAC_VERSION) or greater.  No valac found in path or $$VALAC.'; exit 1 )
+	@ ./chkver min $(VALAC_VERSION) $(MIN_VALAC_VERSION) || ( echo 'Valencia requires Vala compiler $(MIN_VALAC_VERSION) or greater.  You are running' $(VALAC_VERSION) '\b.'; exit 1 )
+	$(if $(MAX_VALAC_VERSION),\
+		@ ./chkver max $(VALAC_VERSION) $(MAX_VALAC_VERSION) || ( echo 'Shotwell cannot be built by Vala compiler $(MAX_VALAC_VERSION) or greater.  You are running' $(VALAC_VERSION) '\b.'; exit 1 ),)
 
 valencia.plugin: valencia.plugin.m4 Makefile
 	@ type m4 > /dev/null || ( echo 'm4 is missing and is required to build Valencia. ' ; exit 1 )
