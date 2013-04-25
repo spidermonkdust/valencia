@@ -521,8 +521,7 @@ string? document_filename(Gedit.Document document) {
 Gedit.Tab? find_tab(string filename, out Gedit.Window window) {
     File location = File.new_for_path(filename);
     
-    foreach (Gtk.Window gtk_w in ((Gedit.App) Application.get_default()).get_windows()) {
-        Gedit.Window w = (Gedit.Window) gtk_w;
+    foreach (Gedit.Window w in Gedit.App.get_default().get_windows()) {
         Gedit.Tab tab = w.get_tab_from_location(location);
         if (tab != null) {
             window = w;

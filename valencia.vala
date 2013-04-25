@@ -739,7 +739,7 @@ public class Instance : Peas.ExtensionBase, Gedit.WindowActivatable {
     }
     
     void on_build() {
-        foreach (Gedit.Document d in ((Gedit.App) Application.get_default()).get_documents())
+        foreach (Gedit.Document d in Gedit.App.get_default().get_documents())
             if (!d.is_untitled() && d.get_modified()) {
                 ++saving;
                 Signal.connect(d, "saved", (Callback) saved_callback, this);
@@ -917,7 +917,7 @@ public class Instance : Peas.ExtensionBase, Gedit.WindowActivatable {
     public void reparse_modified_documents(string filename) {
         Program program = Program.find_containing(filename, true);
 
-        foreach (Gedit.Document document in ((Gedit.App) Application.get_default()).get_documents()) {
+        foreach (Gedit.Document document in Gedit.App.get_default().get_documents()) {
             assert(documents_modified_state.has_key(document));
             bool previously_modified = documents_modified_state.get(document);
             bool currently_modified = document.get_modified();
