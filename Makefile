@@ -75,6 +75,6 @@ dist: $(DIST_FILES)
 	rm -rf $(PLUGIN)-$(VERSION)
 
 clean:
-	rm -f $(SOURCES:.vala=.c) $(SOURCES:.vala=.h) *.so
+	rm -f $(SOURCES:.vala=.c) $(SOURCES:.vala=.vala.c) $(SOURCES:.vala=.h) *.so
 	rm -f valencia.plugin
 
