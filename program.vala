@@ -12,7 +12,7 @@ public class SymbolSet : Object {
     // Since the set stores Symbols, but we actually want to hash their (name) strings, we must
     // provide custom hash and equality functions
     HashSet<Symbol> symbols = 
-        new HashSet<Symbol>((GLib.HashFunc) Symbol.hash, (GLib.EqualFunc) Symbol.equal);
+        new HashSet<Symbol>(Symbol.hash, Symbol.equal);
     string name;
     bool exact;
     bool type;
@@ -195,9 +195,7 @@ public abstract class Symbol : Node {
         return length;
     }
 
-    public static uint hash(void *item) {
-        weak Symbol symbol = (Symbol) item;
-
+    public static uint hash(Symbol symbol) {
         // Unnamed constructors always have null names, so hash their parent class' name
         if (symbol.name == null) {
             Constructor c = symbol as Constructor;
@@ -206,9 +204,7 @@ public abstract class Symbol : Node {
         } else return symbol.name.hash();
     }
 
-    public static bool equal(void* a, void* b) {
-        weak Symbol a_symbol = (Symbol) a;
-        weak Symbol b_symbol = (Symbol) b;
+    public static bool equal(Symbol a_symbol, Symbol b_symbol) {
         return a_symbol.name == b_symbol.name;
     }
 }
