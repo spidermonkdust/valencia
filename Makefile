@@ -11,14 +11,14 @@ SOURCES = autocomplete.vala browser.vala expression.vala gtk_util.vala parser.va
           scanner.vala settings.vala util.vala valencia.vala
  
 PACKAGES = --pkg gedit --pkg gee-0.8 --pkg gtk+-3.0 --pkg gtksourceview-3.0 \
-           --pkg libpeas-1.0 --pkg libvala-0.20 --pkg vte-2.90
+           --pkg libpeas-1.0 --pkg libvala-0.22 --pkg vte-2.90
 
 PACKAGE_VERSIONS = \
     gedit >= 2.91.0 \
     gee-0.8 >= 0.8.6 \
     gtksourceview-3.0 >= 3.0.0 \
     gtk+-3.0 >= 3.0.0 \
-    libvala-0.20 >= 0.20.1 \
+    libvala-0.22 >= 0.22.0 \
     vte-2.90 >= 0.27.90
 
 OUTPUTS = libvalencia.so valencia.plugin
