@@ -1292,7 +1292,7 @@ public class Instance : Peas.ExtensionBase, Gedit.WindowActivatable {
     void update_parse_dialog(double percentage) {
         if (percentage == 1.0) {
             if (parsing_dialog != null) {
-                parsing_dialog.close();
+                parsing_dialog.destroy();
                 parsing_dialog = null;
             }
             return;

@@ -212,10 +212,6 @@ class ProgressBarDialog : Gtk.Window {
     public void set_percentage(double percent) {
         bar.set_fraction(percent);
     }
-    
-    public void close() {
-        hide();
-    }
 }
 
 class SignalConnection : Object {
