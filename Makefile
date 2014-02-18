@@ -16,12 +16,13 @@ MIN_VALAC_VERSION := 0.20.1
 
 SOURCES = autocomplete.vala browser.vala expression.vala gtk_util.vala parser.vala program.vala \
           scanner.vala settings.vala util.vala valencia.vala
- 
+
 PACKAGES = --pkg gedit --pkg gee-0.8 --pkg gtk+-3.0 --pkg gtksourceview-3.0 \
            --pkg libpeas-1.0 --pkg $(LIBVALA) --pkg vte-2.90
 
 PACKAGE_VERSIONS = \
     gedit >= 2.91.0 \
+    gedit <= 3.10.4 \
     gee-0.8 >= 0.8.6 \
     gtksourceview-3.0 >= 3.0.0 \
     gtk+-3.0 >= 3.0.0 \
