@@ -1,7 +1,7 @@
 PLUGIN = valencia
 
 # The version number appears here and also in valencia.plugin.
-VERSION = 0.5.0
+VERSION = 0.5.1
 
 ifndef VALAC
 VALAC = valac
