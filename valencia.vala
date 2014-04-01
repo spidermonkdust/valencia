@@ -1484,9 +1484,9 @@ public class Instance : Peas.ExtensionBase, Gedit.WindowActivatable {
             settings_dialog.show(filename);
     }
     
-    void on_settings_changed(string new_build_command, string new_clean_command) {
+    void on_settings_changed(string new_build_command, string new_clean_command, string new_pkg_blacklist) {
         Program program = get_active_document_program();
-        program.config_file.update(new_build_command, new_clean_command);
+        program.config_file.update(new_build_command, new_clean_command, new_pkg_blacklist);
     }
 
 ////////////////////////////////////////////////////////////

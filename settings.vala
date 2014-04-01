@@ -11,11 +11,14 @@ class ProjectSettingsDialog : Object {
     Gtk.Dialog dialog;
     Gtk.Entry build_entry;
     Gtk.Entry clean_entry;
+    Gtk.Entry blacklist_entry;
 
     string build_command;
     string clean_command;
+    string pkg_blacklist;
 
-    public signal void settings_changed(string new_build_command, string new_clean_command);
+    public signal void settings_changed(string new_build_command, string new_clean_command,
+        string pkg_blacklist);
 
     public ProjectSettingsDialog(Gtk.Window parent_win) {
         // Window creation
@@ -34,16 +37,28 @@ class ProjectSettingsDialog : Object {
         
         Gtk.Alignment align_clean_label = new Gtk.Alignment(0.0f, 0.5f, 0.0f, 0.0f);
         align_clean_label.add(clean_command_label);
-
+        
+        Gtk.Label blacklist_label = new Gtk.Label("VAPI blacklist:");
+        blacklist_entry = new Gtk.Entry();
+        blacklist_entry.activate.connect(on_entry_activated);
+        blacklist_entry.tooltip_text =
+            "Semicolon-delimited list of package names, i.e. \"gtk+-2.0;gee-1.0\"";
+        blacklist_entry.hexpand = true;
+        
+        Gtk.Alignment align_blacklist_label = new Gtk.Alignment(0.0f, 0.5f, 0.0f, 0.0f);
+        align_blacklist_label.add(blacklist_label);
+        
         Gtk.Grid grid = new Gtk.Grid();
         grid.set_column_spacing(12);
         grid.set_row_spacing(6);
         
         grid.attach(align_build_label, 0, 0, 1, 1);
         grid.attach(align_clean_label, 0, 1, 1, 1);
+        grid.attach(align_blacklist_label, 0, 2, 1, 1);
         grid.attach(build_entry, 1, 0, 1, 1);
         grid.attach(clean_entry, 1, 1, 1, 1);
-                     
+        grid.attach(blacklist_entry, 1, 2, 1, 1);
+         
         Gtk.Alignment alignment_box = new Gtk.Alignment(0.5f, 0.5f, 1.0f, 1.0f);
         alignment_box.set_padding(5, 6, 6, 5);
         alignment_box.add(grid);
@@ -68,9 +83,10 @@ class ProjectSettingsDialog : Object {
 
     void load_settings(string active_filename) {
         Program program = Program.find_containing(active_filename);
-            
+        
         build_command = program.config_file.get_build_command();
         clean_command = program.config_file.get_clean_command();
+        pkg_blacklist = program.config_file.get_pkg_blacklist();
     }
 
     public void show(string active_filename) {
@@ -79,6 +95,7 @@ class ProjectSettingsDialog : Object {
 
         build_entry.set_text(build_command);
         clean_entry.set_text(clean_command);
+        blacklist_entry.set_text(pkg_blacklist);
 
         dialog.set_focus(build_entry);
         int result = dialog.run();
@@ -99,6 +116,7 @@ class ProjectSettingsDialog : Object {
     void save_and_close() {
         string new_build_command = build_entry.get_text();
         string new_clean_command = clean_entry.get_text();
+        string new_pkg_blacklist = blacklist_entry.get_text();
 
         bool changed = false;
         if (new_build_command != build_command && new_build_command != "") {
@@ -109,10 +127,15 @@ class ProjectSettingsDialog : Object {
         if (new_clean_command != clean_command && new_clean_command != "") {
             clean_command = new_clean_command;
             changed = true;
-        }        
+        }
+       
+        if (new_pkg_blacklist != pkg_blacklist && new_pkg_blacklist != "") {
+            pkg_blacklist = new_pkg_blacklist;
+            changed = true;
+        }
        
         if (changed)
-            settings_changed(build_command, clean_command);
+            settings_changed(build_command, clean_command, pkg_blacklist);
 
         hide();
     }
