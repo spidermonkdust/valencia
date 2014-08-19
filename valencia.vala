@@ -197,7 +197,9 @@ public class Instance : Peas.ExtensionBase, Gedit.WindowActivatable {
         { "ProjectRun", Gtk.Stock.EXECUTE, "_Run", "<ctrl><alt>r",
           "Run the program", on_run },
         { "ProjectSettings", Gtk.Stock.PROPERTIES, "_Settings", "<ctrl><alt>t",
-          "Customize the build and clean commands", on_project_settings }
+          "Customize the build and clean commands", on_project_settings },
+        { "ProjectWipeValencia", null, "Wipe _Valencia Symbols", null,
+          "Wipe Valencia's discovered symbols and rebuild", on_wipe_valencia }
     };
 
     const string ui = """
@@ -223,6 +225,8 @@ public class Instance : Peas.ExtensionBase, Gedit.WindowActivatable {
                 <menuitem name="ProjectCleanMenu" action="ProjectClean"/>
                 <menuitem name="ProjectRunMenu" action="ProjectRun"/>
                 <menuitem name="ProjectSettingsMenu" action="ProjectSettings"/>
+                <separator/>
+                <menuitem name="ProjectWipeValenciaMenu" action="ProjectWipeValencia"/>
               </menu>
             </placeholder>
           </menubar>
@@ -1482,6 +1486,10 @@ public class Instance : Peas.ExtensionBase, Gedit.WindowActivatable {
 
         if (filename != null)
             settings_dialog.show(filename);
+    }
+    
+    void on_wipe_valencia() {
+        Program.wipe();
     }
     
     void on_settings_changed(string new_build_command, string new_clean_command, string new_pkg_blacklist) {

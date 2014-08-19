@@ -1094,6 +1094,8 @@ public class Program : Object {
     public ConfigurationFile config_file;
 
     bool recursive_project;
+    uint local_parse_source_id = 0;
+    uint system_parse_source_id = 0;
     
     signal void local_parse_complete();
     public signal void system_parse_complete();
@@ -1118,11 +1120,24 @@ public class Program : Object {
             recursive_project = false;
         }
 
-        Idle.add(parse_local_vala_files_idle_callback);
+        local_parse_source_id = Idle.add(parse_local_vala_files_idle_callback);
         
         programs.add(this);
     }
-
+    
+    ~Program() {
+        if (local_parse_source_id != 0)
+            Source.remove(local_parse_source_id);
+        
+        if (system_parse_source_id != 0)
+            Source.remove(system_parse_source_id);
+    }
+    
+    public static void wipe() {
+        programs.clear();
+        system_sources.clear();
+    }
+    
     // Returns true if a BUILD_ROOT or configure.ac was found: files should be found recursively
     // False if only the local directory will be used
     bool get_build_root_directory(GLib.File makefile_dir) {
@@ -1212,6 +1227,8 @@ public class Program : Object {
     }
 
     bool parse_local_vala_files_idle_callback() {
+        local_parse_source_id = 0;
+        
         if (sourcefile_paths.is_empty) {
             // Don't parse system files locally!
             foreach (string system_directory in get_system_vapi_directories()) {
@@ -1237,6 +1254,8 @@ public class Program : Object {
     }
 
     bool parse_system_vala_files_idle_callback() {
+        system_parse_source_id = 0;
+        
         if (sourcefile_paths.size == 0) {
             foreach (string system_directory in get_system_vapi_directories()) {
                 cache_source_paths_in_directory(system_directory, true);
@@ -1346,7 +1365,11 @@ public class Program : Object {
             parsing = true;
             parse_list_index = 0;
             sourcefile_paths.clear();
-            Idle.add(this.parse_system_vala_files_idle_callback);
+            
+            if (system_parse_source_id != 0)
+                Source.remove(system_parse_source_id);
+            
+            system_parse_source_id = Idle.add(this.parse_system_vala_files_idle_callback);
         }
     }
     
