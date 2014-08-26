@@ -34,7 +34,7 @@ class AutocompleteDialog : Object {
         window.hide();
     }
 
-    unowned string? get_completion_target(Gtk.TextBuffer buffer) {
+    string? get_completion_target(Gtk.TextBuffer buffer) {
         Gtk.TextIter start = get_insert_iter(buffer);
         Gtk.TextIter end = start;
         
