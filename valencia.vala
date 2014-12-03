@@ -885,7 +885,7 @@ public class Instance : Peas.ExtensionBase, Gedit.WindowActivatable {
             return;
         }
         
-        Gedit.Encoding encoding = null;
+        Gtk.SourceEncoding encoding = null;
         tab = window.create_tab_from_location(File.new_for_path(filename), encoding, 0, 0, false, true);
         target_filename = filename;
         destination = dest;
