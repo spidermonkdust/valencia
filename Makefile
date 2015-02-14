@@ -8,7 +8,7 @@ VALAC = valac
 endif
 
 ifndef LIBVALA
-LIBVALA=libvala-0.24
+LIBVALA=libvala-0.26
 endif
 
 VALAC_VERSION := `$(VALAC) --version | awk '{print $$2}'`
@@ -18,7 +18,7 @@ SOURCES = autocomplete.vala browser.vala expression.vala gtk_util.vala parser.va
           scanner.vala settings.vala util.vala valencia.vala
 
 PACKAGES = --pkg gedit --pkg gee-0.8 --pkg gtk+-3.0 --pkg gtksourceview-3.0 \
-           --pkg libpeas-1.0 --pkg $(LIBVALA) --pkg vte-2.90
+           --pkg libpeas-1.0 --pkg $(LIBVALA) --pkg vte-2.91
 
 PACKAGE_VERSIONS = \
     gedit >= 3.12.0 \

@@ -834,7 +834,7 @@ public class Instance : Peas.ExtensionBase, Gedit.WindowActivatable {
             if (!d.is_untitled() && d.get_modified()) {
                 ++saving;
                 Signal.connect(d, "saved", (Callback) saved_callback, this);
-                d.do_save(0);
+                Gedit.commands_save_document(window, d);
             }
         if (saving == 0)
             build();
@@ -1349,7 +1349,7 @@ public class Instance : Peas.ExtensionBase, Gedit.WindowActivatable {
         int pid;
         bool ok;
         try {
-            ok = run_terminal.fork_command_full(
+            ok = run_terminal.spawn_sync(
                 0, Path.get_dirname(binary_path), args, null, 0, null, out pid);
         } catch (Error e) { ok = false; }
         if (!ok) {
