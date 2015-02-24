@@ -656,7 +656,7 @@ public class Instance : Peas.ExtensionBase, Gedit.WindowActivatable {
     }
 
     // TODO: Merge this method with saved_callback, below.
-    static void all_save_callback(Gedit.Document document, void *arg1, Instance instance) {
+    static void all_save_callback(Gedit.Document document, Instance instance) {
         string path = document_filename(document);
         Program.update_any(path, buffer_contents(document));
         instance.symbol_browser.on_document_saved();
@@ -824,7 +824,7 @@ public class Instance : Peas.ExtensionBase, Gedit.WindowActivatable {
             build();
     }
 
-    static void saved_callback(Gedit.Document document, void *arg1, Instance instance) {
+    static void saved_callback(Gedit.Document document, Instance instance) {
         SignalHandler.disconnect_by_func(document, (void *) saved_callback, instance);
         instance.on_saved();
     }
